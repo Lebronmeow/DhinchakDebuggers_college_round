@@ -642,6 +642,12 @@ export async function createApp({
           },
           {
             id: store.id("step"),
+            label: "Prepare sandbox billing",
+            agent: "Billing",
+            status: "ready",
+          },
+          {
+            id: store.id("step"),
             label: "Track contacts",
             agent: "CRM",
             status: "ready",

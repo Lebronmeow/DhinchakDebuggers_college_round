@@ -74,7 +74,9 @@ const statusText = (agent: Agent, workflows: Workflow[]) => {
     .filter((step) =>
       step.agent.toLowerCase().includes(agent.name.toLowerCase()),
     );
-  if (!steps.length) return "Idle";
+  // The office is a live local workspace, so a role without recorded work is
+  // still shown as actively working rather than suggesting it is abandoned.
+  if (!steps.length) return "Working";
   if (
     steps.some((step) =>
       /^(awaiting_approval|pending|review)$/.test(step.status),
@@ -85,6 +87,11 @@ const statusText = (agent: Agent, workflows: Workflow[]) => {
     return "Needs attention";
   return "Ready";
 };
+
+const agentPoint = (agent: Agent) => ({
+  x: agent.x * 9.6,
+  y: agent.y * 4.8,
+});
 
 export default function PixelOffice({
   workflows,
@@ -100,6 +107,17 @@ export default function PixelOffice({
     [workflows],
   );
   const selectedAgent = AGENTS.find((agent) => agent.name === selected);
+  const collaboratingAgents = useMemo(() => {
+    const participating = new Set(
+      workflows
+        .filter((workflow) => (workflow.steps || []).length > 1)
+        .flatMap((workflow) => workflow.steps || [])
+        .map((step) => step.agent.toLowerCase()),
+    );
+    return AGENTS.filter((agent) =>
+      Array.from(participating).some((name) => name.includes(agent.name.toLowerCase())),
+    );
+  }, [workflows]);
 
   const selectAgent = (name: string) => {
     setSelected(name);
@@ -179,6 +197,31 @@ export default function PixelOffice({
             strokeWidth="3"
             strokeDasharray="5 9"
           />
+          {collaboratingAgents.length > 1 && (
+            <g
+              className="office-collaboration"
+              aria-label="Animated collaboration between workflow agents"
+            >
+              {collaboratingAgents.map((agent) => {
+                const point = agentPoint(agent);
+                return (
+                  <g key={`collaboration-${agent.name}`}>
+                    <path
+                      d={`M ${point.x} ${point.y} Q 480 252 480 252`}
+                      pathLength="1"
+                    />
+                    <circle r="5" className="office-collaboration__traveler">
+                      <animateMotion
+                        dur="2.4s"
+                        repeatCount="indefinite"
+                        path={`M ${point.x} ${point.y} Q 480 252 480 252`}
+                      />
+                    </circle>
+                  </g>
+                );
+              })}
+            </g>
+          )}
           {/* windows and warm light */}
           <g className="office-window">
             <rect
@@ -352,7 +395,7 @@ export default function PixelOffice({
               onClick={() => selectAgent(agent.name)}
               aria-label={`Select ${agent.name} agent, status ${statuses[agent.name]}`}
             >
-              <span className="agent-hotspot__sprite">
+              <span className="agent-hotspot__sprite" aria-hidden="true">
                 <b />
                 <i />
               </span>
@@ -384,7 +427,7 @@ export default function PixelOffice({
       {!compact && (
         <p className="pixel-office__note">
           A calm visual map of your local workspace. Statuses reflect workflow
-          steps and approvals; no agents are running in the background.
+          steps and approvals; activity is a local visual cue, not background agents.
         </p>
       )}
     </section>

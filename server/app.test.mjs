@@ -90,6 +90,10 @@ test("workflow creates linked drafts and idempotent usage", async () => {
       })
     ).json();
     assert.ok(w.pageId && w.campaignId);
+    assert.deepEqual(
+      w.steps.map((step) => step.agent).sort(),
+      ["Billing", "Coordinator", "CRM", "Events", "Growth", "Website"].sort(),
+    );
     const sub = await (
       await req(x.base, "/api/subscriptions", {
         method: "POST",
