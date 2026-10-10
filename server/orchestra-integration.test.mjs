@@ -64,7 +64,8 @@ test("real tool adapter: model creates page, pauses, publishes on exact approval
       };
     else {
       const ctx = JSON.parse(user);
-      const own = ctx.receipts.filter(
+      const allReceipts = ctx.priorReceipts || ctx.receipts || [];
+      const own = allReceipts.filter(
         (r) =>
           r.agent ===
           (body.messages[0].content.includes("Website specialist")

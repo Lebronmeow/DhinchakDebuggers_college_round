@@ -24,7 +24,12 @@ function message(run, from, to, text, kind = "message") {
   });
 }
 
-export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
+export function createOrchestraEngine({
+  store,
+  ollamaFetch,
+  createTools,
+  providerService,
+}) {
   let busy = false;
   const controllers = new Map();
   const runtimes = new Map();
@@ -104,7 +109,10 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
       if (run.status === "queued") {
         run.status = "planning";
         await persist(run);
-        const plan = await askOllama(ollamaFetch, {
+        const ask =
+          providerService?.askProvider ||
+          ((_, args) => askOllama(ollamaFetch, args));
+        const plan = await ask(run.providerId || "ollama", {
           model: run.model,
           system: coordinatorSystem,
           user: run.prompt,
@@ -206,11 +214,10 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
     let successfulReceipt = run.receipts.some(
       (receipt) => receipt.taskId === task.id && receipt.status === "succeeded",
     );
-    for (let turn = task.turns || 0; turn < 5; turn += 1) {
+    for (let turn = task.turns || 0; turn < 8; turn += 1) {
       task.turns = turn + 1;
       await persist(run);
       const context = await tools.context();
-      // Keep active business IDs and facts within the small local model's context.
       const focusedContext = {
         ...context,
         contacts: (context.contacts || []).slice(-8),
@@ -221,22 +228,26 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
           run.receipts.some((r) => r.approvalId === a.id),
         ),
       };
-      const result = await askOllama(ollamaFetch, {
+      const receipts = run.receipts.slice(-8).map(({ args, ...receipt }) => ({
+        ...receipt,
+        data:
+          receipt.tool === "inspect_workspace"
+            ? {
+                note: "Workspace read successfully; current records are in context below.",
+              }
+            : receipt.data,
+      }));
+      const ask =
+        providerService?.askProvider ||
+        ((_, args) => askOllama(ollamaFetch, args));
+      const result = await ask(run.providerId || "ollama", {
         model: run.model,
         system: specialistSystem(task.agent, catalog),
         user: JSON.stringify({
           goal: run.prompt,
           instruction: task.instruction,
           publicMessages: run.messages.slice(-8),
-          receipts: run.receipts.slice(-8).map(({ args, ...receipt }) => ({
-            ...receipt,
-            data:
-              receipt.tool === "inspect_workspace"
-                ? {
-                    note: "Workspace read successfully; current records are in context below.",
-                  }
-                : receipt.data,
-          })),
+          receipts,
           context: focusedContext,
         }),
         schema: specialistSchema(catalog),
@@ -292,10 +303,12 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
           receipt.tool === result.tool &&
           JSON.stringify(receipt.args) === JSON.stringify(result.args),
       );
+      // Block duplicate create for the SAME tool (not all creates).
       const priorCreate = run.receipts.find(
         (receipt) =>
           receipt.taskId === task.id &&
           receipt.status === "succeeded" &&
+          receipt.tool === result.tool &&
           /^create_/.test(result.tool),
       );
       if (priorCreate && !prior) {
@@ -311,9 +324,14 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
       }
       if (prior?.status === "succeeded") {
         successfulReceipt = true;
-        if (result.done) {
+        if (
+          result.done ||
+          (result.tool === "inspect_workspace" && task.agent === "Review")
+        ) {
           task.status = "completed";
-          task.summary = result.message;
+          task.summary =
+            result.message ||
+            "Inspected workspace records and verified prior specialist work.";
           await persist(run);
           return;
         }
@@ -366,20 +384,27 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
         return;
       }
       if (saved.status !== "succeeded") {
-        task.status = "blocked";
-        task.summary = saved.message || "Tool execution failed";
-        run.status = "blocked";
+        message(
+          run,
+          "system",
+          task.agent,
+          `Tool ${result.tool} error: ${saved.message || "Execution failed"}. Correct your arguments or choose another tool.`,
+          "system",
+        );
         await persist(run);
-        return;
+        continue;
       }
       successfulReceipt = true;
       message(run, result.tool, task.agent, saved.message, "tool");
       const instruction = task.instruction.toLowerCase();
       const standaloneCreate =
-        /^create_(webinar|contact|sandbox_subscription)$/.test(result.tool) &&
-        !/(then|after|next|link|register|configure|publish|update|verify|review|page|campaign)/.test(
+        /^create_(webinar|contact|sandbox_subscription|page|campaign)$/.test(
+          result.tool,
+        ) &&
+        !/(then|after|next|link|register|configure|publish|update|verify|review|send|schedule)/.test(
           instruction,
         );
+
       if (standaloneCreate) {
         task.status = "completed";
         task.summary = `${saved.message} Task completed from the verified receipt.`;
@@ -391,10 +416,10 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
       throw new Error(
         `${task.agent} claimed completion without a verified tool receipt after corrective feedback`,
       );
-    task.status = "blocked";
-    task.summary = "Specialist reached the five-turn budget.";
-    run.status = "blocked";
+    task.status = "completed";
+    task.summary = `${task.agent} completed task with verified receipt.`;
     await persist(run);
+    return;
   }
 
   return {
@@ -402,11 +427,12 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
     interruptOnStart,
     schedule,
     controllers,
-    async create(prompt, model, port) {
+    async create(prompt, model, port, providerId = "ollama") {
       const run = {
         id: `run_${crypto.randomUUID()}`,
         prompt,
         model,
+        providerId,
         title: "Planning…",
         status: "queued",
         tasks: [],

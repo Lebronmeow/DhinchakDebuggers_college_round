@@ -1,4 +1,10 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { Workflow } from "../types";
 import type { AgentRole, AgentRun } from "../orchestra-types";
 import "./pixel-office.css";
@@ -95,6 +101,56 @@ const rooms = AGENTS.slice(1);
 const truncate = (text: string, max = 55) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
+type Point = { x: number; y: number };
+type Motion = {
+  point: Point;
+  path: Point[];
+  room: AgentRole;
+  destination: AgentRole;
+  key: string;
+};
+// Coordinates are feet positions, so the original rect-art sprite stays grounded.
+const deskPoint = (role: AgentRole): Point => {
+  const agent = AGENTS.find((a) => a.name === role)!;
+  return { x: agent.x, y: role === "Coordinator" ? 152 : agent.y + 46 };
+};
+const doorway = (role: AgentRole): Point => {
+  const index = AGENTS.findIndex((a) => a.name === role) - 1;
+  return role === "Coordinator"
+    ? { x: 350, y: 192 }
+    : { x: 295 + (index % 3) * 495, y: index < 3 ? 442 : 692 };
+};
+function corridorPath(
+  from: AgentRole,
+  to: AgentRole,
+  end = deskPoint(to),
+): Point[] {
+  const start = doorway(from),
+    finish = doorway(to);
+  const source = deskPoint(from),
+    target = deskPoint(to);
+  return [
+    { x: start.x, y: source.y },
+    start,
+    { x: 502, y: start.y },
+    { x: 502, y: finish.y },
+    finish,
+    { x: finish.x, y: target.y },
+    end,
+  ];
+}
+function idlePoint(role: AgentRole, time: number): Point {
+  const seed =
+    [...role].reduce((sum, char) => sum * 31 + char.charCodeAt(0), 7) >>> 0;
+  const home = deskPoint(role);
+  const offsets = role === "Coordinator" ? [0, 65, 120] : [0, 50, 100];
+  let sample = seed ^ Math.imul(Math.floor(time / 10000), 0x45d9f3b);
+  sample ^= sample << 13;
+  sample ^= sample >>> 17;
+  sample ^= sample << 5;
+  return { x: home.x + offsets[(sample >>> 0) % offsets.length], y: home.y };
+}
+
 function Sprite({ agent, working }: { agent: Agent; working: boolean }) {
   return (
     <g className={working ? "sprite sprite--working" : "sprite"}>
@@ -164,12 +220,10 @@ function Desk({ x, y }: { x: number; y: number }) {
 function Room({
   agent,
   index,
-  working,
   message,
 }: {
   agent: Agent;
   index: number;
-  working: boolean;
   message?: string;
 }) {
   const x = 20 + (index % 3) * 495,
@@ -255,9 +309,8 @@ function Room({
       />
       <Desk x={x + 100} y={y + 126} />
       <Desk x={x + 298} y={y + 126} />
-      <g transform={`translate(${x + 175} ${y + 154})`}>
-        <Sprite agent={agent} working={working} />
-      </g>
+      {/* Open bottom doorway joins the room's clear lower walkway to the hall. */}
+      <path d={`M${x + 250} ${y + 220}h50`} stroke="#f3e4c4" strokeWidth="10" />
       {message && (
         <g>
           <rect
@@ -333,6 +386,158 @@ export default function PixelOffice({
     [...(active?.messages ?? []), ...(newest?.messages ?? [])]
       .reverse()
       .find((m) => m.from === agent.name)?.text;
+  const plans = AGENTS.map((agent) => {
+    const status = state(agent);
+    const tasks = active?.tasks ?? [];
+    const taskIndex = tasks.findIndex(
+      (task) =>
+        task.agent === agent.name &&
+        ["completed", "done"].includes(task.status),
+    );
+    const handoff = [...(active?.messages ?? [])]
+      .reverse()
+      .find(
+        (item) =>
+          item.from === agent.name &&
+          ["delegation", "message"].includes(item.kind) &&
+          item.to !== agent.name &&
+          AGENTS.some((candidate) => candidate.name === item.to),
+      );
+    // A public directed message or a completed task followed by another department
+    // is the only source of handoff motion. Queuing alone never invents activity.
+    const next =
+      (handoff?.to as AgentRole | undefined) ??
+      (taskIndex >= 0
+        ? tasks.slice(taskIndex + 1).find((task) => task.agent !== agent.name)
+            ?.agent
+        : undefined);
+    const destination =
+      status === "Awaiting approval"
+        ? "Coordinator"
+        : status !== "Working" && active && next
+          ? next
+          : agent.name;
+    const key = `${active?.id ?? "quiet"}:${status}:${destination}:${handoff?.id ?? tasks[taskIndex]?.id ?? ""}`;
+    return { role: agent.name, status, destination, key };
+  });
+  const planKey = JSON.stringify(plans);
+  const motions = useRef<Record<string, Motion>>({});
+  const [positions, setPositions] = useState<Record<string, Point>>({});
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    const currentPlans: typeof plans = JSON.parse(planKey);
+    const now = Date.now();
+    for (const plan of currentPlans) {
+      const previous = motions.current[plan.role];
+      const end =
+        plan.status === "Awaiting approval"
+          ? {
+              x: 1100 + AGENTS.findIndex((a) => a.name === plan.role) * 45,
+              y: 152,
+            }
+          : deskPoint(plan.destination);
+      if (!previous) {
+        const point = deskPoint(plan.role);
+        motions.current[plan.role] = {
+          point,
+          room: plan.role,
+          destination: plan.destination,
+          key: plan.key,
+          path:
+            plan.destination !== plan.role ||
+            plan.status === "Awaiting approval"
+              ? corridorPath(plan.role, plan.destination, end)
+              : [],
+        };
+      } else if (previous.key !== plan.key) {
+        // Finish an in-flight corridor segment before changing rooms: no wall cutting.
+        previous.path =
+          previous.destination === plan.destination &&
+          plan.status !== "Awaiting approval"
+            ? [...previous.path, end]
+            : [
+                ...previous.path,
+                ...corridorPath(previous.destination, plan.destination, end),
+              ];
+        previous.destination = plan.destination;
+        previous.key = plan.key;
+      }
+      const motion = motions.current[plan.role];
+      if (
+        plan.status === "Idle" &&
+        plan.destination === plan.role &&
+        !motion.path.length &&
+        !reducedMotion
+      )
+        motion.path = [idlePoint(plan.role, now)];
+    }
+    const snapshot = () =>
+      setPositions(
+        Object.fromEntries(
+          Object.entries(motions.current).map(([role, motion]) => [
+            role,
+            { ...motion.point },
+          ]),
+        ),
+      );
+    snapshot();
+    if (
+      reducedMotion ||
+      !currentPlans.some(
+        (plan) =>
+          ["Idle", "Working", "Queued", "Awaiting approval"].includes(
+            plan.status,
+          ) ||
+          (active && motions.current[plan.role].path.length),
+      )
+    )
+      return;
+    let frame = 0;
+    let last = 0;
+    const tick = (time: number) => {
+      if (!last) last = time;
+      const elapsed = Math.min(time - last, 100);
+      if (elapsed >= 32) {
+        last = time;
+        for (const plan of currentPlans) {
+          const motion = motions.current[plan.role];
+          if (
+            plan.status === "Idle" &&
+            plan.destination === plan.role &&
+            !motion.path.length
+          )
+            motion.path = [idlePoint(plan.role, Date.now())];
+          const target = motion.path[0];
+          if (!target) continue;
+          const dx = target.x - motion.point.x,
+            dy = target.y - motion.point.y;
+          const distance = Math.hypot(dx, dy);
+          const step = elapsed * (plan.status === "Idle" ? 0.035 : 0.14);
+          if (distance <= step) {
+            motion.point = target;
+            motion.path.shift();
+            if (!motion.path.length) motion.room = motion.destination;
+          } else
+            motion.point = {
+              x: motion.point.x + (dx / distance) * step,
+              y: motion.point.y + (dy / distance) * step,
+            };
+        }
+        snapshot();
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [planKey, reducedMotion]);
   const selectedAgent = AGENTS.find((a) => a.name === selected);
   const select = (a: AgentRole) => {
     setSelected(a);
@@ -463,12 +668,6 @@ export default function PixelOffice({
                 strokeWidth="4"
               />
             ))}
-            <g transform="translate(195 105)">
-              <Sprite
-                agent={AGENTS[0]}
-                working={state(AGENTS[0]) === "Working"}
-              />
-            </g>
             {message(AGENTS[0]) && (
               <text x="1075" y="110" className="svg-note">
                 {truncate(message(AGENTS[0]) as string)}
@@ -486,14 +685,9 @@ export default function PixelOffice({
             <text x="52" y="198" className="hall-label">
               CENTRAL HALL · SHARED CONTEXT
             </text>
+            <path d="M325 175h50" stroke="#f3e4c4" strokeWidth="10" />
             {rooms.map((a, i) => (
-              <Room
-                key={a.name}
-                agent={a}
-                index={i}
-                working={state(a) === "Working"}
-                message={message(a)}
-              />
+              <Room key={a.name} agent={a} index={i} message={message(a)} />
             ))}
             <rect
               x="28"
@@ -571,10 +765,83 @@ export default function PixelOffice({
             <text x="1330" y="747" className="svg-note">
               VEND
             </text>
+            <path
+              d="M502 210v465M997 210v465"
+              stroke="#f3e4c4"
+              strokeWidth="24"
+            />
+            <text x="1090" y="65" className="svg-label">
+              APPROVAL WAIT
+            </text>
+            {AGENTS.map((agent) => {
+              const home = deskPoint(agent.name);
+              return (
+                <g
+                  key={`waypoints-${agent.name}`}
+                  className="pixel-office__waypoints"
+                  aria-hidden="true"
+                >
+                  {(agent.name === "Coordinator"
+                    ? [0, 65, 120]
+                    : [0, 50, 100]
+                  ).map((offset) => (
+                    <rect
+                      key={offset}
+                      x={home.x + offset - 3}
+                      y={home.y - 3}
+                      width="6"
+                      height="6"
+                      fill="#cfbb91"
+                      opacity=".65"
+                    />
+                  ))}
+                </g>
+              );
+            })}
+            {AGENTS.map((agent, index) => {
+              const plan = plans[index];
+              const point = positions[agent.name] ?? deskPoint(agent.name);
+              const moving =
+                !reducedMotion && !!motions.current[agent.name]?.path.length;
+              const visualState =
+                plan.status === "Awaiting approval"
+                  ? "paused"
+                  : moving
+                    ? plan.status === "Idle" && plan.destination === plan.role
+                      ? "idle-walking"
+                      : "traveling"
+                    : plan.status.toLowerCase().replaceAll(" ", "-");
+              return (
+                <g
+                  key={agent.name}
+                  transform={`translate(${point.x} ${point.y - 47})`}
+                  className="pixel-office__sprite"
+                  data-state={visualState}
+                  data-destination={plan.destination}
+                  aria-label={`${agent.name}, ${plan.status}, destination ${plan.destination} ${plan.status === "Awaiting approval" ? "approval area" : "room"}`}
+                >
+                  <Sprite
+                    agent={agent}
+                    working={plan.status === "Working" && !moving}
+                  />
+                  {plan.status === "Working" && !moving && (
+                    <rect x="-15" y="36" width="30" height="8" fill="#493b4b" />
+                  )}
+                  {plan.status === "Awaiting approval" && (
+                    <g fill="#f3d38d">
+                      <rect x="23" y="-12" width="4" height="13" />
+                      <rect x="30" y="-12" width="4" height="13" />
+                    </g>
+                  )}
+                </g>
+              );
+            })}
           </svg>
           <div className="pixel-office__agents" aria-label="Office agents">
             {AGENTS.map((a) => {
               const s = state(a);
+              const plan = plans.find((item) => item.role === a.name)!;
+              const point = positions[a.name] ?? deskPoint(a.name);
               return (
                 <button
                   key={a.name}
@@ -582,13 +849,16 @@ export default function PixelOffice({
                   className={`agent-hotspot ${selected === a.name ? "is-selected" : ""}`}
                   style={
                     {
-                      left: a.x,
-                      top: a.y,
+                      left: `${point.x / 15}%`,
+                      top: `${(point.y - 47) / 9}%`,
                       "--agent-color": a.shirt,
                     } as CSSProperties
                   }
                   onClick={() => select(a.name)}
+                  data-state={s.toLowerCase().replaceAll(" ", "-")}
+                  data-destination={plan.destination}
                   aria-label={`Select ${a.name} agent, status ${s}`}
+                  aria-description={`Destination ${plan.destination} ${s === "Awaiting approval" ? "approval area" : "room"}${reducedMotion ? "; movement paused" : ""}`}
                 >
                   <span className="agent-hotspot__marker" />
                   <span className="agent-hotspot__name">{a.name}</span>
@@ -626,7 +896,8 @@ export default function PixelOffice({
       {!compact && (
         <p className="pixel-office__note">
           Live statuses come from workflow steps and orchestra messages. The
-          room is quiet when no run is active.
+          idle walking is decorative; handoffs follow public messages and task
+          order.
         </p>
       )}
     </section>

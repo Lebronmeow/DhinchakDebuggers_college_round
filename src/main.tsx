@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import PixelOffice from "./components/PixelOffice";
 import OrchestraConsole from "./components/OrchestraConsole";
+import ProviderConnections from "./components/ProviderConnections";
 import Modules from "./components/Modules";
 import { api } from "./api";
 import type { NexusState, View } from "./types";
@@ -304,6 +305,9 @@ function App() {
           </main>
         ) : (
           <main className="world-module-content">
+            {view === "settings" && (
+              <ProviderConnections onChanged={() => void refresh()} />
+            )}
             <Modules
               key={view}
               view={view}

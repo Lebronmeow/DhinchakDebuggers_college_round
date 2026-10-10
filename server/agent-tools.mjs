@@ -36,14 +36,17 @@ export const businessToolCatalog = [
       title: str("Short page title"),
       headline: str("Hero headline"),
       description: str("Useful complete page copy"),
+      content: str("Optional page content / body text"),
       accent: str("Hex color such as #5f9466"),
+      slug: str("Optional URL slug"),
       blocks: {
         type: "array",
         items: { type: "string", enum: ["hero", "details", "registration"] },
       },
       webinarId: str("Optional existing webinar ID to connect registration"),
+      status: str("Optional page status such as draft"),
     },
-    ["title", "headline", "description"],
+    ["title"],
   ),
   tool(
     "update_page",
@@ -54,7 +57,10 @@ export const businessToolCatalog = [
       title: str("Title"),
       headline: str("Headline"),
       description: str("Description"),
+      content: str("Optional page content / body text"),
       accent: str("Hex color"),
+      slug: str("Optional URL slug"),
+      status: str("Optional page status such as draft"),
       blocks: {
         type: "array",
         items: { type: "string", enum: ["hero", "details", "registration"] },
@@ -66,7 +72,12 @@ export const businessToolCatalog = [
     "request_publish_page",
     "Request human approval to publish the exact page snapshot. Pause until approved; do not claim the page is published yet.",
     ["Website"],
-    { id: str("Existing page ID") },
+    {
+      id: str("Existing page ID"),
+      pageId: str("Existing page ID"),
+      recordId: str("Existing page ID"),
+    },
+    [],
   ),
   tool(
     "create_contact",
@@ -104,10 +115,13 @@ export const businessToolCatalog = [
       startsAt: str(
         "ISO date-time with timezone, or empty if user did not specify",
       ),
+      date: str("Event date"),
+      content: str("Event description or details"),
       capacity: { type: "integer", minimum: 1, maximum: 100000 },
       joinUrl: str("Only a user-supplied video room URL; empty if missing"),
+      status: str("Optional event status"),
     },
-    ["title", "description"],
+    ["title"],
   ),
   tool(
     "update_webinar",
@@ -117,9 +131,12 @@ export const businessToolCatalog = [
       id: str("Existing webinar ID"),
       title: str("Title"),
       description: str("Description"),
+      content: str("Event description or details"),
       startsAt: str("ISO date-time"),
+      date: str("Event date"),
       capacity: { type: "integer", minimum: 1, maximum: 100000 },
       joinUrl: str("User-supplied URL"),
+      status: str("Optional event status"),
     },
     ["id"],
   ),
@@ -138,21 +155,39 @@ export const businessToolCatalog = [
     ["Growth"],
     {
       name: str("Campaign name"),
+      title: str("Campaign title or name"),
       subject: str("Subject"),
+      emailSubject: str("Email subject"),
       body: str("Complete email copy"),
+      emailBody: str("Email body copy"),
+      content: str("Email content or body"),
+      status: str("Optional campaign status"),
       audience: {
         type: "string",
-        enum: ["all", "lead", "qualified", "customer"],
+        enum: [
+          "all",
+          "all contacts",
+          "lead",
+          "leads",
+          "qualified",
+          "customer",
+          "customers",
+        ],
       },
       scheduledAt: str("ISO schedule if user supplied, otherwise empty"),
     },
-    ["name", "subject", "body"],
+    [],
   ),
   tool(
     "request_send_campaign",
     "Request human approval to actually send a campaign using the configured Resend provider. If no provider is configured, report blocked; never claim sent.",
     ["Growth"],
-    { id: str("Existing campaign ID") },
+    {
+      id: str("Existing campaign ID"),
+      campaignId: str("Existing campaign ID"),
+      recordId: str("Existing campaign ID"),
+    },
+    [],
   ),
   tool(
     "create_sandbox_subscription",
@@ -352,11 +387,19 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
             accent: "#719a65",
             blocks: ["hero", "details", "registration"],
             ...args,
+            headline: args.headline || args.title,
+            description:
+              args.description || args.content || args.headline || args.title,
           });
           break;
         case "update_page":
           collection = "pages";
-          record = await call(`/api/pages/${safeId(id)}`, "PATCH", patch);
+          record = await call(`/api/pages/${safeId(id)}`, "PATCH", {
+            ...patch,
+            ...(patch.content && !patch.description
+              ? { description: patch.content }
+              : {}),
+          });
           break;
         case "create_contact":
           collection = "contacts";
@@ -372,15 +415,26 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
         case "create_webinar":
           collection = "webinars";
           record = await call("/api/webinars", "POST", {
-            startsAt: "",
             capacity: 50,
             joinUrl: "",
             ...args,
+            startsAt: args.startsAt || args.date || "",
+            description:
+              args.description ||
+              args.content ||
+              args.title ||
+              "Webinar session",
           });
           break;
         case "update_webinar":
           collection = "webinars";
-          record = await call(`/api/webinars/${safeId(id)}`, "PATCH", patch);
+          record = await call(`/api/webinars/${safeId(id)}`, "PATCH", {
+            ...patch,
+            ...(patch.date && !patch.startsAt ? { startsAt: patch.date } : {}),
+            ...(patch.content && !patch.description
+              ? { description: patch.content }
+              : {}),
+          });
           break;
         case "register_contact":
           collection = "webinars";
@@ -395,6 +449,20 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
           record = await call("/api/campaigns", "POST", {
             audience: "lead",
             ...args,
+            name: args.name || args.title || "Campaign",
+            subject:
+              args.subject ||
+              args.emailSubject ||
+              args.name ||
+              args.title ||
+              "Webinar Invitation",
+            body:
+              args.body ||
+              args.emailBody ||
+              args.content ||
+              args.subject ||
+              args.name ||
+              "Join our upcoming session.",
           });
           break;
         case "create_sandbox_subscription":
@@ -410,9 +478,10 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
           );
           break;
         case "request_publish_page": {
-          const page = verified("pages", safeId(id));
+          const targetId = safeId(id || args.pageId || args.recordId);
+          const page = verified("pages", targetId);
           const approval = await call(
-            `/api/pages/${id}/request-publish`,
+            `/api/pages/${targetId}/request-publish`,
             "POST",
           );
           return {
@@ -431,8 +500,9 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
               message:
                 "Email delivery needs a Resend account/API key and verified sender. The campaign was saved but no email was sent. Configure the connection, then start a new request to send this existing campaign.",
             };
+          const targetId = safeId(id || args.campaignId || args.recordId);
           const approval = await call(
-            `/api/campaigns/${safeId(id)}/request-send`,
+            `/api/campaigns/${targetId}/request-send`,
             "POST",
           );
           return {

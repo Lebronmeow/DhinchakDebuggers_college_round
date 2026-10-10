@@ -31,6 +31,14 @@ export type OrchestraConsoleProps = {
 
 type OrchestraResponse = { runs: AgentRun[]; activeRunId: string | null };
 type AiStatus = { available?: boolean; models?: string[]; error?: string };
+type RoutedModel = {
+  id: string;
+  name: string;
+  provider: string;
+  free?: boolean;
+  freeSource?: string;
+  pricing?: { prompt: string | number; completion: string | number };
+};
 const ACTIVE: RunStatus[] = [
   "queued",
   "planning",
@@ -165,7 +173,9 @@ export default function OrchestraConsole({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [models, setModels] = useState<string[]>([]);
+  const [routedModels, setRoutedModels] = useState<RoutedModel[]>([]);
   const [model, setModel] = useState("");
+  const [providerId, setProviderId] = useState("ollama");
   const [aiError, setAiError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -206,12 +216,21 @@ export default function OrchestraConsole({
   useEffect(() => {
     mounted.current = true;
     void refresh();
-    void api<AiStatus>("/ai/status")
-      .then((status) => {
+    void Promise.all([
+      api<AiStatus>("/ai/status"),
+      api<{ models: RoutedModel[] }>("/providers"),
+    ])
+      .then(([status, catalog]) => {
         if (!mounted.current) return;
         const installed = status.models || [];
         setModels(installed);
         setModel((current) => current || installed[0] || "");
+        const discovered = catalog.models || [];
+        setRoutedModels(discovered);
+        if (discovered.length && !installed.length) {
+          setProviderId(discovered[0].provider);
+          setModel(discovered[0].id);
+        }
         setAiError(
           status.available === false
             ? status.error || "Local model service unavailable"
@@ -280,10 +299,12 @@ export default function OrchestraConsole({
     setBusy(true);
     setError("");
     try {
-      const run = await api<AgentRun>("/orchestra/runs", "POST", {
+      const request = {
         prompt: text,
         model,
-      });
+        ...(providerId !== "ollama" ? { providerId } : {}),
+      };
+      const run = await api<AgentRun>("/orchestra/runs", "POST", request);
       if (!mounted.current) return;
       setRuns((current) => [
         run,
@@ -339,16 +360,38 @@ export default function OrchestraConsole({
           Model
           <select
             value={model}
-            onChange={(event) => setModel(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setModel(next);
+              const routed = routedModels.find((item) => item.id === next);
+              if (routed) setProviderId(routed.provider);
+            }}
             disabled={busy || !models.length}
           >
             <option value="">Choose installed model</option>
-            {models.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
+            {routedModels.length
+              ? routedModels.map((item) => (
+                  <option
+                    key={`${item.provider}:${item.id}`}
+                    value={item.id}
+                    data-provider={item.provider}
+                  >
+                    {item.provider} · {item.name}
+                    {item.free ? " · catalog free" : ""}
+                  </option>
+                ))
+              : models.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
           </select>
+          {routedModels.length > 0 && (
+            <small className="oc-model-note">
+              Provider: {providerId}. Free labels reflect the current provider
+              catalog and can change.
+            </small>
+          )}
         </label>
         <label className="oc-prompt">
           Command

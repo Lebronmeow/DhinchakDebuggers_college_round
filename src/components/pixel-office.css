@@ -36,20 +36,20 @@
   align-items: center;
   gap: 6px;
 }
-.status-dot {
+.pixel-office .status-dot {
   width: 8px;
   height: 8px;
   display: inline-block;
   border-radius: 1px;
 }
-.status-dot--working {
+.pixel-office .status-dot--working {
   background: #edb967;
   box-shadow: 0 0 8px #edb967;
 }
-.status-dot--ready {
+.pixel-office .status-dot--ready {
   background: #8fc08b;
 }
-.status-dot--approval {
+.pixel-office .status-dot--approval {
   background: #df876f;
 }
 .pixel-office__frame {
@@ -69,42 +69,42 @@
   height: auto;
   image-rendering: pixelated;
 }
-.svg-label {
+.pixel-office .svg-label {
   fill: #ead9b3;
   font:
     700 15px ui-monospace,
     monospace;
   letter-spacing: 2px;
 }
-.svg-note {
+.pixel-office .svg-note {
   fill: #e8d5ad;
   font:
     11px ui-monospace,
     monospace;
   letter-spacing: 1px;
 }
-.hall-label {
+.pixel-office .hall-label {
   fill: #765644;
   font:
     700 11px ui-monospace,
     monospace;
   letter-spacing: 1px;
 }
-.room-label {
+.pixel-office .room-label {
   fill: #503833;
   font:
     700 14px ui-monospace,
     monospace;
   letter-spacing: 2px;
 }
-.bubble-text {
+.pixel-office .bubble-text {
   fill: #4b3736;
   font:
     10px ui-monospace,
     monospace;
 }
-.sprite--working {
-  animation: pixel-bob 1.1s steps(2, end) infinite;
+.pixel-office .sprite--working {
+  animation: pixel-office-bob 1.1s steps(2, end) infinite;
 }
 .pixel-office__agents {
   position: absolute;
@@ -113,9 +113,9 @@
   width: 100%;
   height: 100%;
 }
-.agent-hotspot {
+.pixel-office .agent-hotspot {
   position: absolute;
-  transform: translate(-50%, -20%);
+  transform: translate(-50%, -14px);
   border: 2px solid transparent;
   background: transparent;
   color: #322936;
@@ -127,17 +127,17 @@
   align-items: center;
   font: inherit;
 }
-.agent-hotspot:hover,
-.agent-hotspot:focus-visible,
-.agent-hotspot.is-selected {
+.pixel-office .agent-hotspot:hover,
+.pixel-office .agent-hotspot:focus-visible,
+.pixel-office .agent-hotspot.is-selected {
   border-color: #f4d18e;
   background: #fff1c918;
   outline: none;
 }
-.agent-hotspot__marker {
+.pixel-office .agent-hotspot__marker {
   display: none;
 }
-.agent-hotspot__name {
+.pixel-office .agent-hotspot__name {
   font:
     700 10px/1.2 ui-monospace,
     monospace;
@@ -146,22 +146,22 @@
   background: #f5dfad;
   border: 1px solid #584532;
 }
-.agent-status {
+.pixel-office .agent-status {
   font-size: 9px;
   color: #6e5b4c;
   background: #ead7b3;
   padding: 2px 4px;
 }
-.agent-status--working {
+.pixel-office .agent-status--working {
   color: #a45b39;
 }
-.agent-status--awaiting-approval {
+.pixel-office .agent-status--awaiting-approval {
   color: #9b6b29;
 }
-.agent-status--ready {
+.pixel-office .agent-status--ready {
   color: #467454;
 }
-.agent-status--queued {
+.pixel-office .agent-status--queued {
   color: #67647c;
 }
 .pixel-office__detail {
@@ -173,7 +173,7 @@
   padding: 10px 12px;
   margin-top: 12px;
 }
-.detail-avatar {
+.pixel-office .detail-avatar {
   width: 30px;
   height: 30px;
   display: grid;
@@ -219,7 +219,7 @@
 .pixel-office--compact .pixel-office__note {
   display: none;
 }
-@keyframes pixel-bob {
+@keyframes pixel-office-bob {
   0%,
   100% {
     transform: translateY(0);

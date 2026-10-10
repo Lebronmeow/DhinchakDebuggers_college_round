@@ -6,6 +6,7 @@ import { renderPublicPage } from "./public-page.mjs";
 import { registerOrchestraRoutes } from "./orchestra/routes.mjs";
 import { createBusinessTools } from "./agent-tools.mjs";
 import { registerDeliveryRoutes } from "./delivery.mjs";
+import { registerProviderRoutes } from "./providers/routes.mjs";
 
 const STAGES = new Set(["lead", "qualified", "customer"]);
 const CONTENT_FIELDS = [
@@ -240,6 +241,11 @@ export async function createApp({
   };
   app.get("/api/state", (_, res) => res.json(store.get()));
   registerDeliveryRoutes(app, { store, providerFetch });
+  const providers = registerProviderRoutes(app, {
+    store,
+    providerFetch,
+    ollamaFetch,
+  });
   app.post("/api/contacts", (req, res) =>
     mutate((s) => addContact(s, req.body || {}, "local"), res),
   );
@@ -325,19 +331,37 @@ export async function createApp({
       return a;
     }, res),
   );
+  app.post("/api/pages/:id/publish", (req, res) =>
+    mutate((s) => {
+      const p = find(s.pages, req.params.id, "page");
+      p.status = "published";
+      p._published = pageSnapshot(p);
+      activity(s, "page.published", `Page ${p.title} published`);
+      return p;
+    }, res),
+  );
+  app.post("/api/pages/:id/unpublish", (req, res) =>
+    mutate((s) => {
+      const p = find(s.pages, req.params.id, "page");
+      p.status = "draft";
+      delete p._published;
+      activity(s, "page.unpublished", `Page ${p.title} reverted to draft`);
+      return p;
+    }, res),
+  );
   app.get("/p/:slug", (req, res) => {
     if (!localOrigin(req))
       return res.status(403).json({ error: "origin is not allowed" });
+    const isPreview = req.query.preview === "1" || req.query.preview === "true";
     const p = store
       .get()
       .pages.find(
         (x) =>
           x.slug === req.params.slug &&
-          x.status === "published" &&
-          x._published,
+          (isPreview || (x.status === "published" && x._published)),
       );
     if (!p) return res.status(404).json({ error: "page not found" });
-    res.type("html").send(renderPublicPage(p));
+    res.type("html").send(renderPublicPage(p, { isDraft: !p._published }));
   });
   app.post("/p/:slug/register", (req, res) =>
     store
@@ -861,6 +885,7 @@ export async function createApp({
     store,
     ollamaFetch,
     createTools: (port) => createBusinessTools({ store, port }),
+    providerService: providers.service,
   });
   if (fs.existsSync(distDir)) app.use(express.static(distDir));
   app.use((err, _req, res, _next) =>

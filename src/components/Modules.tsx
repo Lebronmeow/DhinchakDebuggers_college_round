@@ -553,6 +553,33 @@ function Websites({ p }: { p: ModuleProps }) {
                 <Button disabled={busy} onClick={save}>
                   Save draft
                 </Button>
+                {draft.status !== "published" ? (
+                  <Button
+                    disabled={busy}
+                    onClick={async () => {
+                      if (await save())
+                        await act(
+                          () => api(`/pages/${draft.id}/publish`, "POST"),
+                          "Page published live!",
+                        );
+                    }}
+                  >
+                    Publish now
+                  </Button>
+                ) : (
+                  <Button
+                    quiet
+                    disabled={busy}
+                    onClick={async () => {
+                      await act(
+                        () => api(`/pages/${draft.id}/unpublish`, "POST"),
+                        "Reverted to draft",
+                      );
+                    }}
+                  >
+                    Unpublish
+                  </Button>
+                )}
                 <Button
                   quiet
                   disabled={busy}
@@ -564,24 +591,117 @@ function Websites({ p }: { p: ModuleProps }) {
                       );
                   }}
                 >
-                  Save & request publish
+                  Request approval
                 </Button>
               </div>
             </div>
             <div className="nx-preview">
+              {p.state.approvals.find(
+                (a) =>
+                  a.kind === "publish_page" &&
+                  a.targetId === draft.id &&
+                  a.status === "pending",
+              ) && (
+                <div
+                  style={{
+                    background: "#fef3c7",
+                    border: "1px solid #f59e0b",
+                    borderRadius: "8px",
+                    padding: "10px 14px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "#92400e",
+                      fontWeight: "600",
+                    }}
+                  >
+                    ⚡ Publication pending approval
+                  </span>
+                  <Button
+                    onClick={async () => {
+                      const ap = p.state.approvals.find(
+                        (a) =>
+                          a.kind === "publish_page" &&
+                          a.targetId === draft.id &&
+                          a.status === "pending",
+                      );
+                      if (ap) {
+                        await act(
+                          () =>
+                            api(`/approvals/${ap.id}/decide`, "POST", {
+                              decision: "approve",
+                            }),
+                          "Page approved and published live!",
+                        );
+                      }
+                    }}
+                  >
+                    Approve & Make Live
+                  </Button>
+                </div>
+              )}
               <div className="nx-preview-tools">
                 <span className="nx-eyebrow">
-                  Preview · form does not submit
+                  Preview ·{" "}
+                  {draft.status === "published"
+                    ? "Live Published"
+                    : "Draft Mode"}
                 </span>
-                <span>
+                <span
+                  style={{ display: "flex", gap: "8px", alignItems: "center" }}
+                >
+                  <a
+                    className="nx-btn nx-btn-quiet"
+                    href={`/p/${draft.slug}?preview=1`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 8px",
+                      fontSize: "11px",
+                    }}
+                  >
+                    Preview in new tab <ExternalLink size={12} />
+                  </a>
+                  {draft.status === "published" && (
+                    <a
+                      className="nx-btn"
+                      href={`/p/${draft.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        textDecoration: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "4px 8px",
+                        fontSize: "11px",
+                      }}
+                    >
+                      Live page <ExternalLink size={12} />
+                    </a>
+                  )}
                   <button
-                    className="nx-device active"
+                    className={
+                      device === "desktop" ? "nx-device active" : "nx-device"
+                    }
                     onClick={() => setDevice("desktop")}
                   >
                     Desktop
                   </button>
                   <button
-                    className="nx-device"
+                    className={
+                      device === "mobile" ? "nx-device active" : "nx-device"
+                    }
                     onClick={() => setDevice("mobile")}
                   >
                     Mobile
@@ -590,34 +710,250 @@ function Websites({ p }: { p: ModuleProps }) {
               </div>
               <div
                 className={`nx-preview-card ${device}`}
-                style={{ borderTopColor: draft.accent }}
+                style={{ borderTopColor: draft.accent || "#43744e" }}
               >
-                <span className="nx-badge nx-muted">Unpublished preview</span>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "16px",
+                  }}
+                >
+                  <span
+                    className={`nx-badge ${draft.status === "published" ? "nx-badge-success" : "nx-muted"}`}
+                    style={
+                      draft.status === "published"
+                        ? { background: "#dcfce7", color: "#15803d" }
+                        : {}
+                    }
+                  >
+                    {draft.status === "published"
+                      ? "● Published"
+                      : "Draft Preview"}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "var(--muted)",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    /p/{draft.slug}
+                  </span>
+                </div>
                 {draft.blocks.map((b, i) =>
                   b === "hero" ? (
-                    <h2 key={i}>{draft.headline}</h2>
+                    <div
+                      key={i}
+                      style={{ textAlign: "center", margin: "16px 0 20px" }}
+                    >
+                      <span
+                        style={{
+                          display: "inline-block",
+                          fontSize: "10px",
+                          fontWeight: "700",
+                          letterSpacing: "1.5px",
+                          color: draft.accent || "#43744e",
+                          textTransform: "uppercase",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        {draft.title}
+                      </span>
+                      <h2
+                        style={{
+                          fontSize: "24px",
+                          fontWeight: "800",
+                          letterSpacing: "-0.5px",
+                          margin: "0 0 12px",
+                          lineHeight: "1.2",
+                        }}
+                      >
+                        {draft.headline}
+                      </h2>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          gap: "8px",
+                          flexWrap: "wrap",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            background: "var(--bg)",
+                            border: "1px solid var(--line)",
+                            padding: "3px 8px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          ⚡ Interactive
+                        </span>
+                        <span
+                          style={{
+                            background: "var(--bg)",
+                            border: "1px solid var(--line)",
+                            padding: "3px 8px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          🎯 Targeted Session
+                        </span>
+                        <span
+                          style={{
+                            background: "var(--bg)",
+                            border: "1px solid var(--line)",
+                            padding: "3px 8px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          ✓ Free RSVP
+                        </span>
+                      </div>
+                    </div>
                   ) : b === "details" ? (
-                    <p key={i}>{draft.description}</p>
+                    <div
+                      key={i}
+                      style={{
+                        background: "var(--bg)",
+                        border: "1px solid var(--line)",
+                        borderRadius: "10px",
+                        padding: "16px",
+                        margin: "16px 0",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "800",
+                          letterSpacing: "1px",
+                          color: draft.accent || "#43744e",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        ABOUT THIS SESSION
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "13px",
+                          lineHeight: "1.6",
+                          color: "var(--muted)",
+                        }}
+                      >
+                        {draft.description}
+                      </p>
+                    </div>
                   ) : b === "registration" ? (
-                    <div className="nx-fake-form" key={i}>
-                      <input disabled placeholder="Name" />
-                      <input disabled placeholder="Email" />
-                      <Button disabled>Register preview only</Button>
+                    <div
+                      className="nx-fake-form"
+                      key={i}
+                      style={{
+                        border: "1px solid var(--line)",
+                        borderTop: `3px solid ${draft.accent || "#43744e"}`,
+                        borderRadius: "10px",
+                        padding: "16px",
+                        margin: "16px 0",
+                        background: "#ffffff",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: "800",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Save Your Seat
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--muted)",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        Space is strictly limited. Confirm below.
+                      </div>
+                      <input
+                        disabled
+                        placeholder="Your Name"
+                        style={{
+                          width: "100%",
+                          padding: "8px 10px",
+                          fontSize: "12px",
+                          marginBottom: "8px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--line)",
+                          background: "var(--bg)",
+                        }}
+                      />
+                      <input
+                        disabled
+                        placeholder="Your Email (alex@example.com)"
+                        style={{
+                          width: "100%",
+                          padding: "8px 10px",
+                          fontSize: "12px",
+                          marginBottom: "8px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--line)",
+                          background: "var(--bg)",
+                        }}
+                      />
+                      <button
+                        disabled
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          background: draft.accent || "#43744e",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "6px",
+                          fontWeight: "700",
+                          fontSize: "12px",
+                          cursor: "default",
+                        }}
+                      >
+                        Register Your Interest →
+                      </button>
                     </div>
                   ) : (
                     <p key={i}>{b}</p>
                   ),
                 )}
-                {draft.status === "published" && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: "16px",
+                    paddingTop: "12px",
+                    borderTop: "1px solid var(--line)",
+                  }}
+                >
                   <a
                     className="nx-link"
-                    href={`/p/${draft.slug}`}
+                    href={`/p/${draft.slug}?preview=1`}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Open published page <ExternalLink size={13} />
+                    Open Full Preview <ExternalLink size={13} />
                   </a>
-                )}
+                  {draft.status === "published" && (
+                    <a
+                      className="nx-link"
+                      href={`/p/${draft.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: "#15803d" }}
+                    >
+                      Visit Public URL <ExternalLink size={13} />
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           </div>
