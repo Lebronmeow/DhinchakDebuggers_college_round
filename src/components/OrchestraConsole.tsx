@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Bot,
   Check,
+  CheckCheck,
   ChevronRight,
   CircleAlert,
   Clock3,
@@ -210,6 +211,7 @@ export default function OrchestraConsole({
   const [routedModels, setRoutedModels] = useState<RoutedModel[]>([]);
   const [model, setModel] = useState("");
   const [providerId, setProviderId] = useState("openrouter");
+  const [autoApprove, setAutoApprove] = useState(false);
   const [employeeModels, setEmployeeModels] = useState<Record<string, string>>(
     DEFAULT_EMPLOYEE_MODELS,
   );
@@ -368,6 +370,7 @@ export default function OrchestraConsole({
       const request: Record<string, unknown> = {
         prompt: text,
         model,
+        ...(autoApprove ? { autoApprove: true } : {}),
         ...(providerId !== "ollama" || hasCustomEmployees
           ? {
               providerId,
@@ -548,6 +551,15 @@ export default function OrchestraConsole({
             ))}
           </div>
         </div>
+        <label className="oc-auto-approve-toggle">
+          <input
+            type="checkbox"
+            checked={autoApprove}
+            onChange={(e) => setAutoApprove(e.target.checked)}
+            disabled={busy}
+          />
+          <span>Allow all actions without approval (Auto-approve execution)</span>
+        </label>
         <button
           className="oc-run"
           type="submit"
@@ -639,6 +651,23 @@ export default function OrchestraConsole({
                   )}
                 {selectedRun.status === "awaiting_approval" && (
                   <>
+                    <button
+                      className="oc-btn-approve-all"
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await api("/approvals/approve-all", "POST", {});
+                          await mutate(`/orchestra/runs/${selectedRun.id}/resume`);
+                        } catch (err) {
+                          setError((err as Error).message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                      disabled={busy}
+                    >
+                      <CheckCheck size={14} /> Allow all without approval (Approve & Resume)
+                    </button>
                     <button onClick={() => onApprovals?.()}>
                       <ShieldCheck size={14} /> Review approvals
                     </button>

@@ -1332,6 +1332,48 @@ export async function createApp({
       return a;
     }, res),
   );
+  app.post("/api/approvals/approve-all", (req, res) =>
+    mutate((s) => {
+      const pendingApprovals = (s.approvals || []).filter(
+        (a) => a.status === "pending",
+      );
+      for (const a of pendingApprovals) {
+        const target = (
+          a.kind === "publish_page" ? s.pages : s.campaigns
+        ).find((item) => item.id === a.targetId);
+        if (target) {
+          a.status = "approved";
+          if (a.kind === "publish_page") {
+            target.status = "published";
+            target._published = pageSnapshot(target);
+          } else {
+            target.status = "scheduled_local";
+          }
+        }
+      }
+      activity(
+        s,
+        "approval.approve_all",
+        `Approved ${pendingApprovals.length} pending decisions.`,
+      );
+      return { approvedCount: pendingApprovals.length };
+    }, res),
+  );
+  app.post("/api/state/reset", (req, res) =>
+    mutate((s) => {
+      s.contacts = [];
+      s.pages = [];
+      s.campaigns = [];
+      s.webinars = [];
+      s.subscriptions = [];
+      s.approvals = [];
+      s.workflows = [];
+      s.activities = [];
+      s.orchestraRuns = [];
+      activity(s, "system.reset", "Workspace records reset to empty state.");
+      return { success: true, message: "Workspace records reset to empty state." };
+    }, res),
+  );
   app.get("/api/ai/status", async (_, res) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 2500);

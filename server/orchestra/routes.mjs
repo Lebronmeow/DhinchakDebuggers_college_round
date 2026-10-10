@@ -102,6 +102,7 @@ export async function registerOrchestraRoutes(
         providerId,
         agentModels,
         agentProviders,
+        Boolean(req.body?.autoApprove),
       );
       return res.status(202).json(run);
     } catch (error) {

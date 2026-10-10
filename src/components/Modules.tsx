@@ -1776,12 +1776,41 @@ function Approvals({ p }: { p: ModuleProps }) {
         ).length
       : 0;
   };
+  const pendingCount = (p.state.approvals || []).filter(
+    (a) => a.status === "pending",
+  ).length;
+
   return (
     <Shell eyebrow="Review queue" title="Approvals">
-      <div className="nx-notice">
-        Review the exact operation. Page publication executes locally. Send
-        approvals execute real email delivery when configured; local scheduling
-        alone does not send.
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div className="nx-notice" style={{ margin: 0, flex: 1 }}>
+          Review the exact operation. Page publication executes locally. Send
+          approvals execute real email delivery when configured; local scheduling
+          alone does not send.
+        </div>
+        {pendingCount > 0 && (
+          <Button
+            disabled={busy}
+            onClick={() =>
+              run(
+                () => api("/approvals/approve-all", "POST"),
+                `Approved all ${pendingCount} pending action${pendingCount > 1 ? "s" : ""}`,
+              )
+            }
+          >
+            <Check size={15} />
+            Approve all without approval ({pendingCount})
+          </Button>
+        )}
       </div>
       <div className="nx-cards">
         {p.state.approvals.map((a) => (
@@ -1945,47 +1974,6 @@ function Analytics({ p }: { p: ModuleProps }) {
             Real-time pipeline synchronization across prospect acquisition,
             session attendance, and autonomous specialist actions.
           </p>
-        </div>
-        <div className="nx-deck-dials">
-          <div className="nx-deck-gauge">
-            <span className="nx-gauge-label">PIPELINE VELOCITY</span>
-            <div className="nx-gauge-meter">
-              <strong className="nx-gauge-num">
-                {contacts.length
-                  ? Math.round((qualifiedCount / contacts.length) * 100)
-                  : 0}
-                %
-              </strong>
-              <div className="nx-gauge-bar">
-                <div
-                  className="nx-gauge-fill"
-                  style={{
-                    width: `${contacts.length ? Math.round((qualifiedCount / contacts.length) * 100) : 0}%`,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="nx-deck-gauge">
-            <span className="nx-gauge-label">PAID CONVERSION</span>
-            <div className="nx-gauge-meter">
-              <strong className="nx-gauge-num">
-                {contacts.length
-                  ? Math.round((customersCount / contacts.length) * 100)
-                  : 0}
-                %
-              </strong>
-              <div className="nx-gauge-bar">
-                <div
-                  className="nx-gauge-fill"
-                  style={{
-                    width: `${contacts.length ? Math.round((customersCount / contacts.length) * 100) : 0}%`,
-                    background: "#4cbf72",
-                  }}
-                />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 

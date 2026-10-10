@@ -29,26 +29,28 @@
 }
 .world-brand {
   display: flex;
-  gap: 14px;
-  align-items: center;
-  padding: 25px 21px;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding: 22px 20px;
   border: 0;
   border-bottom: 1px solid #ddd6c7;
   background: none;
   text-align: left;
   width: 100%;
+  color: #171d1a;
+  cursor: pointer;
 }
-.world-brand strong {
-  font-size: 17px;
-  color: #393730;
-  display: block;
-  letter-spacing: -0.4px;
+.world-brand:hover .nexus-logo {
+  opacity: 0.85;
 }
-.world-brand small {
-  font-size: 10px;
-  color: #a09684;
+.world-brand-sub {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #8c8270;
   display: block;
-  margin-top: 5px;
 }
 .world-mascot {
   width: 33px;
@@ -274,6 +276,21 @@
   border-color: #3568de;
   color: #fff;
   box-shadow: 0 5px 14px #4477e526;
+}
+.world-top-actions > .world-live-room-btn {
+  background: #171d1a;
+  border-color: #262e2a;
+  color: #f7f4ee;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.world-top-actions > .world-live-room-btn:hover {
+  background: #252e2a;
+  border-color: #3b4741;
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 .world-top-actions b {
   font-size: 9px;

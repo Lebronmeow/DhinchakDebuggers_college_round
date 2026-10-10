@@ -736,18 +736,22 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 13px;
+  padding: 8px 14px;
   border-radius: 8px;
-  background: rgba(118, 228, 194, 0.15);
-  color: #76e4c2;
+  background: #181f1b;
+  color: #f5f2eb;
+  border: 1px solid #2d3831;
   font-weight: 600;
   font-size: 13px;
   text-decoration: none;
   transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 .nx-room-btn:hover {
-  background: rgba(118, 228, 194, 0.25);
+  background: #25312b;
+  border-color: #3f4e45;
   color: #ffffff;
+  transform: translateY(-1px);
 }
 .nx-register {
   display: flex;

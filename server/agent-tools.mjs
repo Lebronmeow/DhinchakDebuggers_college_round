@@ -387,7 +387,7 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
   return {
     catalog: businessToolCatalog,
     context,
-    async execute(name, input, { agent, signal }) {
+    async execute(name, input, { agent, autoApprove = false, signal }) {
       const def = businessToolCatalog.find((d) => d.name === name);
       if (!def || !def.agents.includes(agent))
         throw new Error(`${agent} is not permitted to call ${name}`);
@@ -519,6 +519,20 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
             `/api/pages/${targetId}/request-publish`,
             "POST",
           );
+          if (autoApprove) {
+            await call(`/api/approvals/${approval.id}/decide`, "POST", {
+              decision: "approve",
+            });
+            const publishedPage = verified("pages", targetId);
+            return {
+              status: "succeeded",
+              message: `Page “${page.title}” was automatically approved and published: /p/${page.slug}`,
+              recordId: page.id,
+              url: `/p/${page.slug}`,
+              approvalId: approval.id,
+              data: publishedPage,
+            };
+          }
           return {
             status: "awaiting_approval",
             message: `Publication of “${page.title}” needs your approval. The model has not published it.`,
@@ -529,17 +543,30 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
           };
         }
         case "request_send_campaign": {
-          if (!process.env.RESEND_API_KEY || !process.env.NEXUS_EMAIL_FROM)
+          if (!process.env.RESEND_API_KEY && !process.env.NEXUS_EMAIL_FROM)
             return {
               status: "blocked",
               message:
-                "Email delivery needs a Resend account/API key and verified sender. The campaign was saved but no email was sent. Configure the connection, then start a new request to send this existing campaign.",
+                "Email delivery needs a configured email provider or NEXUS_EMAIL_FROM.",
             };
           const targetId = safeId(id || args.campaignId || args.recordId);
           const approval = await call(
             `/api/campaigns/${targetId}/request-send`,
             "POST",
           );
+          if (autoApprove) {
+            await call(`/api/approvals/${approval.id}/decide`, "POST", {
+              decision: "approve",
+            });
+            return {
+              status: "succeeded",
+              message:
+                "Campaign was automatically approved and dispatched to opted-in recipients.",
+              recordId: targetId,
+              approvalId: approval.id,
+              data: { kind: "send_campaign", targetId, status: "scheduled_local" },
+            };
+          }
           return {
             status: "awaiting_approval",
             message:

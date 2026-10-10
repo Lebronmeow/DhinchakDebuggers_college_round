@@ -25,6 +25,7 @@ import PixelOffice from "./components/PixelOffice";
 import OrchestraConsole from "./components/OrchestraConsole";
 import ProviderConnections from "./components/ProviderConnections";
 import Modules from "./components/Modules";
+import { NexusLogo } from "./components/NexusLogo";
 import { api } from "./api";
 import type { NexusState, View } from "./types";
 import type { AgentRun, OrchestraState } from "./orchestra-types";
@@ -130,14 +131,8 @@ function App() {
       )}
       <aside className={`world-sidebar ${mobile ? "is-open" : ""}`}>
         <button className="world-brand" onClick={() => navigate("office")}>
-          <span className="world-mascot">
-            <i />
-            <b />
-          </span>
-          <span>
-            <strong>Nexus World</strong>
-            <small>Your AI business orchestra</small>
-          </span>
+          <NexusLogo size="medium" />
+          <small className="world-brand-sub">AI Business Orchestra</small>
         </button>
         <nav aria-label="Workspace navigation">
           {nav.map(({ view: target, label, icon: Icon, tag }) => (
@@ -208,13 +203,17 @@ function App() {
               Decisions{pending > 0 && <b>{pending}</b>}
             </button>
             <button
+              className="world-live-room-btn"
               onClick={() => {
-                navigate("office");
-                setConsoleOpen((value) => !value);
+                const liveUrl =
+                  state?.webinars?.find((w) => w.joinUrl)?.joinUrl ||
+                  "https://meet.jit.si/NexusWebinar-Live";
+                window.open(liveUrl, "_blank", "noopener,noreferrer");
               }}
+              title="Launch live interactive webinar room in Jitsi Meet"
             >
-              <Radio size={16} />
-              {consoleOpen ? "Hide" : "Show"} live feed
+              <Video size={15} />
+              <span>Launch Live Room</span>
             </button>
             <button
               className="icon-only"
@@ -223,10 +222,6 @@ function App() {
             >
               <RefreshCw size={16} />
             </button>
-            <span className="world-live">
-              <span className={active ? "working-dot" : "ready-dot"} />
-              {active ? "Working" : "Connected"}
-            </span>
           </div>
         </header>
         {error && (

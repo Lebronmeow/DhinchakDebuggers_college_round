@@ -376,6 +376,7 @@ export function createOrchestraEngine({
           runId: run.id,
           taskId: task.id,
           agent: task.agent,
+          autoApprove: Boolean(run.autoApprove),
           signal,
         });
       } catch (error) {
@@ -451,12 +452,14 @@ export function createOrchestraEngine({
       providerId = "ollama",
       agentModels = null,
       agentProviders = null,
+      autoApprove = false,
     ) {
       const run = {
         id: `run_${crypto.randomUUID()}`,
         prompt,
         model,
         providerId,
+        autoApprove: Boolean(autoApprove),
         agentModels:
           agentModels ||
           (providerId === "openrouter" ? { ...DEFAULT_EMPLOYEE_MODELS } : {}),

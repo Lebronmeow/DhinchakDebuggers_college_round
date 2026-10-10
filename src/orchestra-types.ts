@@ -51,6 +51,7 @@ export interface AgentRun {
   prompt: string;
   model: string;
   providerId?: string;
+  autoApprove?: boolean;
   agentModels?: Record<string, string>;
   agentProviders?: Record<string, string>;
   title: string;
