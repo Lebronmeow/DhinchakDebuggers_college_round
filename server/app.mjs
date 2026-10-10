@@ -150,6 +150,8 @@ export async function createApp({
     if (existing) {
       existing.consent ||= consent(b.consent);
       if (b.name) existing.name = text(b.name, "name", true, 120);
+      if (b.phone) existing.phone = text(b.phone, "phone", false, 50);
+      if (b.notes) existing.notes = text(b.notes, "notes", false, 1000);
       return existing;
     }
     const c = {
@@ -160,6 +162,8 @@ export async function createApp({
       stage: stage(b.stage || "lead"),
       source,
       consent: consent(b.consent),
+      phone: b.phone ? text(b.phone, "phone", false, 50) : "",
+      notes: b.notes ? text(b.notes, "notes", false, 1000) : "",
       createdAt: now(),
     };
     s.contacts.push(c);
@@ -266,9 +270,386 @@ export async function createApp({
       if (req.body.stage !== undefined) c.stage = stage(req.body.stage);
       if (req.body.company !== undefined)
         c.company = text(req.body.company, "company", false, 160);
+      if (req.body.phone !== undefined)
+        c.phone = text(req.body.phone, "phone", false, 50);
+      if (req.body.notes !== undefined)
+        c.notes = text(req.body.notes, "notes", false, 1000);
       if (req.body.consent !== undefined) c.consent = consent(req.body.consent);
       activity(s, "contact.updated", `Contact ${c.email} updated`);
       return c;
+    }, res),
+  );
+  app.delete("/api/contacts/:id", (req, res) =>
+    mutate((s) => {
+      const idx = s.contacts.findIndex((c) => c.id === req.params.id);
+      if (idx === -1)
+        throw Object.assign(new Error("contact not found"), { status: 404 });
+      const [removed] = s.contacts.splice(idx, 1);
+      activity(s, "contact.deleted", `Contact ${removed.email} deleted`);
+      return { success: true, removed };
+    }, res),
+  );
+  app.post("/api/contacts/seed-sample", (req, res) =>
+    mutate((s) => {
+      const sampleList = [
+        // 20 leads
+        {
+          name: "Liam Vance",
+          email: "liam.vance@retailhub.test",
+          company: "Retail Hub",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Emma Watson",
+          email: "emma.watson@edulearn.test",
+          company: "EduLearn Global",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "Noah Miller",
+          email: "noah.m@saasflow.test",
+          company: "SaaS Flow",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Olivia Davis",
+          email: "olivia.d@apexscale.test",
+          company: "Apex Scale",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "William Garcia",
+          email: "william.g@fincloud.test",
+          company: "FinCloud Labs",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Sophia Rodriguez",
+          email: "sophia.r@medtech.test",
+          company: "MedTech Pulse",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "James Martinez",
+          email: "james.m@logisticx.test",
+          company: "LogistiX",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "Isabella Hernandez",
+          email: "isabella.h@aione.test",
+          company: "AI One Solutions",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Benjamin Lopez",
+          email: "benjamin.l@marketpro.test",
+          company: "MarketPro Direct",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "Mia Gonzalez",
+          email: "mia.g@cloudnest.test",
+          company: "CloudNest Inc",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Lucas Wilson",
+          email: "lucas.w@ecotech.test",
+          company: "EcoTech Energy",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Charlotte Anderson",
+          email: "charlotte.a@growthhub.test",
+          company: "GrowthHub Ventures",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "Henry Thomas",
+          email: "henry.t@nexuscorp.test",
+          company: "Nexus Corp",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Amelia Taylor",
+          email: "amelia.t@cyberguard.test",
+          company: "CyberGuard AI",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Alexander Moore",
+          email: "alex.m@streamline.test",
+          company: "StreamLine SaaS",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "Evelyn Jackson",
+          email: "evelyn.j@dataprime.test",
+          company: "DataPrime Systems",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Daniel Martin",
+          email: "daniel.m@quantum.test",
+          company: "Quantum Compute",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Harper Lee",
+          email: "harper.l@brightbyte.test",
+          company: "BrightByte Studio",
+          stage: "lead",
+          consent: false,
+        },
+        {
+          name: "Matthew Perez",
+          email: "matthew.p@coreinfra.test",
+          company: "Core Infra",
+          stage: "lead",
+          consent: true,
+        },
+        {
+          name: "Abigail Thompson",
+          email: "abigail.t@novafintech.test",
+          company: "Nova FinTech",
+          stage: "lead",
+          consent: true,
+        },
+        // 20 qualified
+        {
+          name: "Marcus Wright",
+          email: "marcus.w@apexscale.test",
+          company: "Apex Scale",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Elena Rostova",
+          email: "elena.r@cyberdyne.test",
+          company: "Cyberdyne Systems",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Arthur Pendelton",
+          email: "arthur.p@waynetech.test",
+          company: "Wayne Enterprises",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Diana Prince",
+          email: "diana.p@themyscira.test",
+          company: "Themyscira Ltd",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Victor Stone",
+          email: "victor.s@starlabs.test",
+          company: "S.T.A.R. Labs",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Hal Jordan",
+          email: "hal.j@ferrisair.test",
+          company: "Ferris Aircraft",
+          stage: "qualified",
+          consent: false,
+        },
+        {
+          name: "Barry Allen",
+          email: "barry.a@centralforensics.test",
+          company: "Central Forensics",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Oliver Queen",
+          email: "oliver.q@queenindustries.test",
+          company: "Queen Industries",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Felicity Smoak",
+          email: "felicity.s@smoaktech.test",
+          company: "Smoak Tech",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Ray Palmer",
+          email: "ray.p@palmertech.test",
+          company: "Palmer Technologies",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Curtis Holt",
+          email: "curtis.h@fairplay.test",
+          company: "Fairplay Dynamics",
+          stage: "qualified",
+          consent: false,
+        },
+        {
+          name: "Caitlin Snow",
+          email: "caitlin.s@cryotech.test",
+          company: "CryoTech Biopharma",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Cisco Ramon",
+          email: "cisco.r@vibronics.test",
+          company: "Vibronics Hardware",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Iris West",
+          email: "iris.w@centralcitizen.test",
+          company: "The Central Citizen",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Joe West",
+          email: "joe.w@metropolice.test",
+          company: "Metro Police Ops",
+          stage: "qualified",
+          consent: false,
+        },
+        {
+          name: "Kara Danvers",
+          email: "kara.d@catco.test",
+          company: "CatCo Media",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "James Olsen",
+          email: "james.o@guardiancorp.test",
+          company: "Guardian Security",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Winn Schott",
+          email: "winn.s@deoanalytics.test",
+          company: "DEO Analytics",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "Lena Luthor",
+          email: "lena.l@lcorplabs.test",
+          company: "L-Corp Innovations",
+          stage: "qualified",
+          consent: true,
+        },
+        {
+          name: "J'onn J'onzz",
+          email: "jonn.j@marsinvest.test",
+          company: "Mars Investigations",
+          stage: "qualified",
+          consent: true,
+        },
+        // 10 customers
+        {
+          name: "Selina Kyle",
+          email: "selina.k@gothamluxury.test",
+          company: "Gotham Luxury Group",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Harvey Dent",
+          email: "harvey.d@justicepartners.test",
+          company: "Justice Legal Partners",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Lucius Fox",
+          email: "lucius.f@appliedsciences.test",
+          company: "Fox Applied Sciences",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Alfred Pennyworth",
+          email: "alfred.p@pennyworthholdings.test",
+          company: "Pennyworth Holdings",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Barbara Gordon",
+          email: "barbara.g@oraclecloud.test",
+          company: "Oracle Cyber Systems",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Dick Grayson",
+          email: "dick.g@bludhavencapital.test",
+          company: "Bludhaven Capital",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Jason Todd",
+          email: "jason.t@outlawlogistics.test",
+          company: "Red Hood Logistics",
+          stage: "customer",
+          consent: false,
+        },
+        {
+          name: "Tim Drake",
+          email: "tim.d@detectivemind.test",
+          company: "Drake Intelligence",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Stephanie Brown",
+          email: "stephanie.b@spoilersec.test",
+          company: "Spoiler Cybersecurity",
+          stage: "customer",
+          consent: true,
+        },
+        {
+          name: "Cassandra Cain",
+          email: "cassandra.c@silentstrike.test",
+          company: "Shadow Logistics",
+          stage: "customer",
+          consent: true,
+        },
+      ];
+      for (const item of sampleList) {
+        addContact(s, item, "sample-seed");
+      }
+      return { success: true, count: s.contacts.length };
     }, res),
   );
   app.post("/api/pages", (req, res) =>

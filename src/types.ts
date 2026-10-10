@@ -17,6 +17,8 @@ export interface Contact {
   stage: string;
   source: string;
   consent: boolean;
+  phone?: string;
+  notes?: string;
   createdAt: string;
 }
 export interface Page {
@@ -124,4 +126,5 @@ export interface ModuleProps {
   state: NexusState;
   refresh: () => Promise<void>;
   notify: (message: string, error?: boolean) => void;
+  onNavigate?: (view: View) => void;
 }

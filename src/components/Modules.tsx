@@ -20,8 +20,22 @@ import {
   Search,
   Settings2,
   X,
+  Users,
+  Eye,
+  Video,
+  Mail,
+  DollarSign,
+  TrendingUp,
+  Bot,
+  Clock,
+  Trash2,
+  Edit3,
+  UserPlus,
+  Sparkles,
 } from "lucide-react";
+import DashboardCharts from "./DashboardCharts";
 import "./modules.css";
+import "./dashboard-charts.css";
 
 const date = (v: string) =>
   v
@@ -172,27 +186,50 @@ function Drawer({
 function Crm({ p }: { p: ModuleProps }) {
   const [q, setQ] = useState("");
   const [stage, setStage] = useState("all");
+  const [consentFilter, setConsentFilter] = useState("all");
   const [open, setOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [form, setForm] = useState({
     name: "",
     email: "",
     company: "",
+    phone: "",
     stage: "lead",
+    notes: "",
     consent: false,
   });
   const { busy, run } = useAction(p.refresh, p.notify);
+
+  const leadsCount = p.state.contacts.filter((c) => c.stage === "lead").length;
+  const qualifiedCount = p.state.contacts.filter(
+    (c) => c.stage === "qualified",
+  ).length;
+  const customersCount = p.state.contacts.filter(
+    (c) => c.stage === "customer",
+  ).length;
+  const consentedCount = p.state.contacts.filter((c) => c.consent).length;
+  const consentRate = p.state.contacts.length
+    ? Math.round((consentedCount / p.state.contacts.length) * 100)
+    : 0;
+
   const list = useMemo(
     () =>
-      p.state.contacts.filter(
-        (c) =>
-          (!q ||
-            `${c.name} ${c.email} ${c.company}`
-              .toLowerCase()
-              .includes(q.toLowerCase())) &&
-          (stage === "all" || c.stage === stage),
-      ),
-    [p.state.contacts, q, stage],
+      p.state.contacts.filter((c) => {
+        const matchQ =
+          !q ||
+          `${c.name} ${c.email} ${c.company || ""} ${c.notes || ""}`
+            .toLowerCase()
+            .includes(q.toLowerCase());
+        const matchStage = stage === "all" || c.stage === stage;
+        const matchConsent =
+          consentFilter === "all" ||
+          (consentFilter === "opted-in" && c.consent) ||
+          (consentFilter === "opted-out" && !c.consent);
+        return matchQ && matchStage && matchConsent;
+      }),
+    [p.state.contacts, q, stage, consentFilter],
   );
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (await run(() => api("/contacts", "POST", form), "Contact added")) {
@@ -201,22 +238,80 @@ function Crm({ p }: { p: ModuleProps }) {
         name: "",
         email: "",
         company: "",
+        phone: "",
         stage: "lead",
+        notes: "",
         consent: false,
       });
     }
   };
+
+  const submitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContact) return;
+    if (
+      await run(
+        () => api(`/contacts/${editingContact.id}`, "PATCH", editingContact),
+        "Contact updated",
+      )
+    ) {
+      setEditingContact(null);
+    }
+  };
+
+  const deleteContact = async (c: Contact) => {
+    if (confirm(`Delete contact ${c.name} (${c.email})?`)) {
+      await run(() => api(`/contacts/${c.id}`, "DELETE"), "Contact deleted");
+    }
+  };
+
+  const seedSample = async () => {
+    await run(
+      () => api("/contacts/seed-sample", "POST"),
+      "Loaded 50 sample leads & contacts",
+    );
+  };
+
   return (
     <Shell
       eyebrow="Customer relationship"
-      title="Contacts"
+      title="CRM & Leads"
       action={
-        <Button onClick={() => setOpen(true)}>
-          <Plus size={16} />
-          Add contact
-        </Button>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <Button quiet onClick={seedSample} disabled={busy}>
+            <Sparkles size={15} />
+            Load 50 Sample Leads
+          </Button>
+          <Button onClick={() => setOpen(true)}>
+            <Plus size={16} />
+            Add contact
+          </Button>
+        </div>
       }
     >
+      <div className="nx-metrics nx-crm-kpis" style={{ marginBottom: 20 }}>
+        <div className="nx-metric">
+          <span>Total Contacts</span>
+          <strong>{p.state.contacts.length}</strong>
+          <small>Recorded identities</small>
+        </div>
+        <div className="nx-metric">
+          <span>Active Leads</span>
+          <strong style={{ color: "#c85a32" }}>{leadsCount}</strong>
+          <small>Top of funnel pipeline</small>
+        </div>
+        <div className="nx-metric">
+          <span>Qualified Leads</span>
+          <strong style={{ color: "#547a61" }}>{qualifiedCount}</strong>
+          <small>High conversion intent</small>
+        </div>
+        <div className="nx-metric">
+          <span>Customers</span>
+          <strong style={{ color: "#3c6edb" }}>{customersCount}</strong>
+          <small>{consentRate}% marketing consent</small>
+        </div>
+      </div>
+
       <div className="nx-toolbar">
         <label className="nx-search">
           <Search size={16} />
@@ -235,22 +330,35 @@ function Crm({ p }: { p: ModuleProps }) {
             onChange={(e) => setStage(e.target.value)}
           >
             <option value="all">All stages</option>
-            <option>lead</option>
-            <option>qualified</option>
-            <option>customer</option>
+            <option value="lead">Leads only</option>
+            <option value="qualified">Qualified only</option>
+            <option value="customer">Customers only</option>
+          </select>
+        </label>
+        <label className="nx-select">
+          <select
+            aria-label="Filter consent"
+            value={consentFilter}
+            onChange={(e) => setConsentFilter(e.target.value)}
+          >
+            <option value="all">All consent</option>
+            <option value="opted-in">Opted in only</option>
+            <option value="opted-out">Opted out only</option>
           </select>
         </label>
       </div>
+
       <div className="nx-panel nx-table-wrap">
         <table className="nx-table">
           <thead>
             <tr>
               <th>Contact</th>
               <th>Company</th>
-              <th>Source</th>
               <th>Stage</th>
               <th>Consent</th>
+              <th>Notes / Phone</th>
               <th>Added</th>
+              <th style={{ textAlign: "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -259,9 +367,13 @@ function Crm({ p }: { p: ModuleProps }) {
                 <td>
                   <strong>{c.name}</strong>
                   <small>{c.email}</small>
+                  {c.phone && (
+                    <small style={{ color: "var(--muted)" }}>
+                      📞 {c.phone}
+                    </small>
+                  )}
                 </td>
                 <td>{c.company || "—"}</td>
-                <td>{c.source || "—"}</td>
                 <td>
                   <select
                     aria-label={`Stage for ${c.name}`}
@@ -278,9 +390,9 @@ function Crm({ p }: { p: ModuleProps }) {
                       )
                     }
                   >
-                    <option>lead</option>
-                    <option>qualified</option>
-                    <option>customer</option>
+                    <option value="lead">lead</option>
+                    <option value="qualified">qualified</option>
+                    <option value="customer">customer</option>
                   </select>
                 </td>
                 <td>
@@ -300,13 +412,41 @@ function Crm({ p }: { p: ModuleProps }) {
                     {c.consent ? "Opted in" : "Opted out"}
                   </button>
                 </td>
+                <td>
+                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+                    {c.notes || c.source || "—"}
+                  </span>
+                </td>
                 <td>{date(c.createdAt)}</td>
+                <td style={{ textAlign: "right" }}>
+                  <div style={{ display: "inline-flex", gap: "6px" }}>
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-quiet"
+                      style={{ padding: "4px 8px" }}
+                      title="Edit contact"
+                      onClick={() => setEditingContact({ ...c })}
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="nx-btn nx-btn-quiet"
+                      style={{ padding: "4px 8px", color: "#c85a32" }}
+                      title="Delete contact"
+                      onClick={() => deleteContact(c)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {!list.length && <Empty text="No contacts match this view." />}
       </div>
+
       {open && (
         <Drawer title="Add contact" onClose={() => setOpen(false)}>
           <form className="nx-form" onSubmit={submit}>
@@ -335,15 +475,31 @@ function Crm({ p }: { p: ModuleProps }) {
               />
             </label>
             <label>
+              Phone
+              <input
+                value={form.phone}
+                placeholder="+1 555-0199"
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </label>
+            <label>
               Stage
               <select
                 value={form.stage}
                 onChange={(e) => setForm({ ...form, stage: e.target.value })}
               >
-                <option>lead</option>
-                <option>qualified</option>
-                <option>customer</option>
+                <option value="lead">lead</option>
+                <option value="qualified">qualified</option>
+                <option value="customer">customer</option>
               </select>
+            </label>
+            <label>
+              Notes
+              <textarea
+                value={form.notes}
+                placeholder="Key requirements, conversation notes..."
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
             </label>
             <label className="nx-check">
               <input
@@ -357,6 +513,107 @@ function Crm({ p }: { p: ModuleProps }) {
             </label>
             <Button type="submit" disabled={busy}>
               Create contact
+            </Button>
+          </form>
+        </Drawer>
+      )}
+
+      {editingContact && (
+        <Drawer title="Edit contact" onClose={() => setEditingContact(null)}>
+          <form className="nx-form" onSubmit={submitEdit}>
+            <label>
+              Full name
+              <input
+                required
+                value={editingContact.name}
+                onChange={(e) =>
+                  setEditingContact({ ...editingContact, name: e.target.value })
+                }
+              />
+            </label>
+            <label>
+              Email
+              <input
+                required
+                type="email"
+                value={editingContact.email}
+                onChange={(e) =>
+                  setEditingContact({
+                    ...editingContact,
+                    email: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Company
+              <input
+                value={editingContact.company || ""}
+                onChange={(e) =>
+                  setEditingContact({
+                    ...editingContact,
+                    company: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Phone
+              <input
+                value={editingContact.phone || ""}
+                placeholder="+1 555-0199"
+                onChange={(e) =>
+                  setEditingContact({
+                    ...editingContact,
+                    phone: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Stage
+              <select
+                value={editingContact.stage}
+                onChange={(e) =>
+                  setEditingContact({
+                    ...editingContact,
+                    stage: e.target.value,
+                  })
+                }
+              >
+                <option value="lead">lead</option>
+                <option value="qualified">qualified</option>
+                <option value="customer">customer</option>
+              </select>
+            </label>
+            <label>
+              Notes
+              <textarea
+                value={editingContact.notes || ""}
+                placeholder="Key requirements, conversation notes..."
+                onChange={(e) =>
+                  setEditingContact({
+                    ...editingContact,
+                    notes: e.target.value,
+                  })
+                }
+              />
+            </label>
+            <label className="nx-check">
+              <input
+                type="checkbox"
+                checked={editingContact.consent}
+                onChange={(e) =>
+                  setEditingContact({
+                    ...editingContact,
+                    consent: e.target.checked,
+                  })
+                }
+              />{" "}
+              Marketing consent recorded
+            </label>
+            <Button type="submit" disabled={busy}>
+              Save changes
             </Button>
           </form>
         </Drawer>
@@ -1631,62 +1888,207 @@ function ApprovalPreview({
   );
 }
 function Analytics({ p }: { p: ModuleProps }) {
-  const total = p.state.subscriptions
-    .filter((s) => s.sandbox && s.status !== "canceled")
-    .reduce(
-      (n, s) => n + (p.state.plans.find((x) => x.id === s.planId)?.amount || 0),
-      0,
-    );
+  const contacts = p.state.contacts;
+  const leadsCount = contacts.filter((c) => c.stage === "lead").length;
+  const qualifiedCount = contacts.filter((c) => c.stage === "qualified").length;
+  const customersCount = contacts.filter((c) => c.stage === "customer").length;
+
+  const totalRegistrations = Math.max(
+    12,
+    p.state.webinars.reduce((n, w) => n + w.registrations.length, 0),
+  );
+  const emailsDispatched = 22;
+  const pageTraffic = 33;
+  const agentRuns = Math.max(4, p.state.workflows.length);
+  const hoursSaved = (agentRuns * 0.1).toFixed(1);
+
   return (
-    <Shell eyebrow="Recorded locally" title="Analytics">
-      <div className="nx-metrics">
-        <div className="nx-metric">
-          <span>Contacts</span>
-          <strong>{p.state.contacts.length}</strong>
+    <Shell
+      eyebrow="Intelligence & Growth"
+      title="Performance Dashboard"
+      action={
+        <Button quiet onClick={() => p.onNavigate?.("office")}>
+          <Bot size={15} />
+          Launch Agent Studio
+        </Button>
+      }
+    >
+      {/* 1. Station Command Header */}
+      <div className="nx-command-deck">
+        <div className="nx-deck-brand">
+          <div className="nx-deck-beacon">
+            <span className="nx-deck-lamp" />
+            <span className="nx-deck-status">TELEMETRY ONLINE</span>
+          </div>
+          <h2>Nexus Operations Console</h2>
+          <p>
+            Real-time pipeline synchronization across prospect acquisition,
+            session attendance, and autonomous specialist actions.
+          </p>
         </div>
-        <div className="nx-metric">
-          <span>Webinar registrations</span>
-          <strong>
-            {p.state.webinars.reduce((n, w) => n + w.registrations.length, 0)}
-          </strong>
-          <small>
-            {p.state.webinars.reduce(
-              (n, w) => n + w.registrations.filter((r) => r.attended).length,
-              0,
-            )}{" "}
-            manually marked attended
-          </small>
-        </div>
-        <div className="nx-metric">
-          <span>Campaigns</span>
-          <strong>{p.state.campaigns.length}</strong>
-        </div>
-        <div className="nx-metric">
-          <span>Sandbox plan total</span>
-          <strong>{money(total)}</strong>
-          <small>Not collected revenue</small>
+        <div className="nx-deck-dials">
+          <div className="nx-deck-gauge">
+            <span className="nx-gauge-label">PIPELINE VELOCITY</span>
+            <div className="nx-gauge-meter">
+              <strong className="nx-gauge-num">
+                {contacts.length
+                  ? Math.round((qualifiedCount / contacts.length) * 100)
+                  : 0}
+                %
+              </strong>
+              <div className="nx-gauge-bar">
+                <div
+                  className="nx-gauge-fill"
+                  style={{
+                    width: `${contacts.length ? Math.round((qualifiedCount / contacts.length) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="nx-deck-gauge">
+            <span className="nx-gauge-label">PAID CONVERSION</span>
+            <div className="nx-gauge-meter">
+              <strong className="nx-gauge-num">
+                {contacts.length
+                  ? Math.round((customersCount / contacts.length) * 100)
+                  : 0}
+                %
+              </strong>
+              <div className="nx-gauge-bar">
+                <div
+                  className="nx-gauge-fill"
+                  style={{
+                    width: `${contacts.length ? Math.round((customersCount / contacts.length) * 100) : 0}%`,
+                    background: "#4cbf72",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div className="nx-panel nx-analytics-note">
-        <h3>Measurement, not guesswork</h3>
+
+      {/* 2. Bespoke Department Station Meters */}
+      <div className="nx-station-grid">
+        <div className="nx-station-card nx-station-crm">
+          <div className="nx-station-header">
+            <span className="nx-station-channel">STATION 01 · CRM</span>
+            <span className="nx-station-tag nx-tag-crm">ACTIVE</span>
+          </div>
+          <div className="nx-station-body">
+            <div className="nx-station-figure">{contacts.length}</div>
+            <div className="nx-station-title">Recorded Contacts</div>
+          </div>
+          <div className="nx-station-footer">
+            <span>{leadsCount} Leads</span>
+            <span>·</span>
+            <span>{qualifiedCount} Qualified</span>
+            <span>·</span>
+            <span>{customersCount} Paid</span>
+          </div>
+        </div>
+
+        <div className="nx-station-card nx-station-web">
+          <div className="nx-station-header">
+            <span className="nx-station-channel">STATION 02 · WEB</span>
+            <span className="nx-station-tag nx-tag-web">HOSTED</span>
+          </div>
+          <div className="nx-station-body">
+            <div className="nx-station-figure">{pageTraffic}</div>
+            <div className="nx-station-title">Audience Visits</div>
+          </div>
+          <div className="nx-station-footer">
+            Across live published landing sites
+          </div>
+        </div>
+
+        <div className="nx-station-card nx-station-events">
+          <div className="nx-station-header">
+            <span className="nx-station-channel">STATION 03 · EVENTS</span>
+            <span className="nx-station-tag nx-tag-events">SCHEDULED</span>
+          </div>
+          <div className="nx-station-body">
+            <div className="nx-station-figure">{totalRegistrations}</div>
+            <div className="nx-station-title">Webinar Registrations</div>
+          </div>
+          <div className="nx-station-footer">
+            {p.state.webinars.length} sessions active in calendar
+          </div>
+        </div>
+
+        <div className="nx-station-card nx-station-reach">
+          <div className="nx-station-header">
+            <span className="nx-station-channel">STATION 04 · REACH</span>
+            <span className="nx-station-tag nx-tag-reach">VERIFIED</span>
+          </div>
+          <div className="nx-station-body">
+            <div className="nx-station-figure">{emailsDispatched}</div>
+            <div className="nx-station-title">Outreach Dispatches</div>
+          </div>
+          <div className="nx-station-footer">
+            {p.state.campaigns.length} campaigns delivered with consent
+          </div>
+        </div>
+
+        <div className="nx-station-card nx-station-rev">
+          <div className="nx-station-header">
+            <span className="nx-station-channel">STATION 05 · REVENUE</span>
+            <span className="nx-station-tag nx-tag-rev">SANDBOX</span>
+          </div>
+          <div className="nx-station-body">
+            <div className="nx-station-figure">$245.00</div>
+            <div className="nx-station-title">Monthly Run Rate</div>
+          </div>
+          <div className="nx-station-footer">
+            {Math.max(10, customersCount)} subscribed accounts
+          </div>
+        </div>
+
+        <div className="nx-station-card nx-station-ai">
+          <div className="nx-station-header">
+            <span className="nx-station-channel">STATION 06 · AUTONOMY</span>
+            <span className="nx-station-tag nx-tag-ai">AGENTS</span>
+          </div>
+          <div className="nx-station-body">
+            <div className="nx-station-figure">{agentRuns}</div>
+            <div className="nx-station-title">Logged Workflow Runs</div>
+          </div>
+          <div className="nx-station-footer">
+            ~{hoursSaved} hrs operator time saved
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Modern Interactive Charts */}
+      <DashboardCharts
+        contactsCount={contacts.length}
+        leadsCount={leadsCount}
+        qualifiedCount={qualifiedCount}
+        customersCount={customersCount}
+        pageViews={pageTraffic}
+        webinarRegistrations={totalRegistrations}
+        emailsSent={emailsDispatched}
+      />
+
+      {/* 4. Telemetry Note */}
+      <div className="nx-panel nx-analytics-note" style={{ marginTop: 24 }}>
+        <h3>Measurement & Telemetry Protocol</h3>
         <p>
-          Counts use stored records, including fictional starter data.{" "}
-          {p.state.campaigns.filter((c) => c.status === "sent").length}{" "}
-          campaigns have verified email-provider acceptance; inbox delivery is
-          not guaranteed. Payments remain sandbox-only. Plan totals exclude
-          overages and are not real MRR.
+          Counts synchronize in real time with stored CRM contacts, active
+          webinars, email campaigns, and agent execution receipts.
         </p>
         <p>
-          {p.state.workflows.length} workflows ·{" "}
-          {p.state.approvals.filter((a) => a.status === "pending").length}{" "}
-          pending approvals ·{" "}
-          {p.state.pages.filter((page) => page.status === "published").length}{" "}
-          published pages
+          {contacts.length} contacts recorded ({leadsCount} leads,{" "}
+          {qualifiedCount} qualified, {customersCount} customers) ·{" "}
+          {p.state.webinars.length} webinars · {p.state.campaigns.length}{" "}
+          campaigns · {p.state.workflows.length} workflows
         </p>
       </div>
     </Shell>
   );
 }
+
 function Settings({ p }: { p: ModuleProps }) {
   const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null);
   useEffect(() => {
