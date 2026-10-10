@@ -223,4 +223,24 @@ describe("usable business interfaces", () => {
       }),
     ).toBeTruthy();
   });
+
+  it("keeps every office role visibly active before a workflow exists", () => {
+    render(<PixelOffice workflows={[]} />);
+
+    for (const role of [
+      "Growth",
+      "Website",
+      "CRM",
+      "Events",
+      "Billing",
+      "Coordinator",
+    ]) {
+      expect(
+        screen.getByRole("button", {
+          name: `Select ${role} agent, status Idle`,
+        }),
+      ).toBeTruthy();
+    }
+    expect(screen.getAllByText("Idle").length).toBeGreaterThan(0);
+  });
 });
