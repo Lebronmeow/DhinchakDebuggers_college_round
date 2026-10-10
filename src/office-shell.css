@@ -626,3 +626,15 @@
     font-size: 9px !important;
   }
 }
+
+.nav-agent-tag {
+  font-size: 9px;
+  font-weight: 750;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(200, 90, 50, 0.12);
+  color: #c85a32;
+  border: 1px solid rgba(200, 90, 50, 0.25);
+  margin-left: auto;
+  letter-spacing: 0.05em;
+}

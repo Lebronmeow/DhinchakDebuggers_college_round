@@ -31,21 +31,21 @@ import type { AgentRun, OrchestraState } from "./orchestra-types";
 import "./styles.css";
 import "./office-shell.css";
 
-const nav: { view: View; label: string; icon: typeof Users }[] = [
-  { view: "office", label: "Office", icon: Building2 },
-  { view: "crm", label: "Contacts", icon: Users },
-  { view: "websites", label: "Websites", icon: Globe2 },
-  { view: "campaigns", label: "Campaigns", icon: Mail },
-  { view: "webinars", label: "Webinars", icon: Video },
-  { view: "billing", label: "Billing", icon: Wallet },
+const nav: { view: View; label: string; icon: typeof Users; tag?: string }[] = [
   { view: "analytics", label: "Dashboard", icon: BarChart3 },
-  { view: "approvals", label: "Decisions", icon: ShieldCheck },
+  { view: "office", label: "Agent Studio", icon: Building2, tag: "AGENT" },
+  { view: "crm", label: "CRM & Leads", icon: Users },
+  { view: "websites", label: "Landing Sites", icon: Globe2 },
+  { view: "webinars", label: "Webinars", icon: Video },
+  { view: "campaigns", label: "Marketing", icon: Mail },
+  { view: "billing", label: "SaaS Billing", icon: Wallet },
+  { view: "approvals", label: "Audit Log", icon: ShieldCheck },
   { view: "settings", label: "Connections", icon: Settings2 },
 ];
 const roles = ["Website", "CRM", "Growth", "Events", "Billing", "Review"];
 
 function App() {
-  const [view, setView] = useState<View>("office");
+  const [view, setView] = useState<View>("analytics");
   const [state, setState] = useState<NexusState | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [error, setError] = useState("");
@@ -140,7 +140,7 @@ function App() {
           </span>
         </button>
         <nav aria-label="Workspace navigation">
-          {nav.map(({ view: target, label, icon: Icon }) => (
+          {nav.map(({ view: target, label, icon: Icon, tag }) => (
             <button
               key={target}
               className={view === target ? "is-active" : ""}
@@ -148,6 +148,7 @@ function App() {
             >
               <Icon size={19} />
               <span>{label}</span>
+              {tag && <small className="nav-agent-tag">{tag}</small>}
               {target === "approvals" && pending > 0 && <em>{pending}</em>}
             </button>
           ))}
@@ -314,6 +315,7 @@ function App() {
               state={state}
               refresh={refresh}
               notify={notify}
+              onNavigate={navigate}
             />
             <footer className="world-module-footer">
               <BookOpen size={13} />

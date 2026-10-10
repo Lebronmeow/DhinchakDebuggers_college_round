@@ -30,7 +30,7 @@ const AGENTS: Agent[] = [
     name: "Coordinator",
     role: "CEO / orchestration",
     x: 195,
-    y: 125,
+    y: 142,
     shirt: "#ee805e",
     skin: "#dba17c",
     hair: "#35252e",
@@ -112,7 +112,7 @@ type Motion = {
 // Coordinates are feet positions, so the original rect-art sprite stays grounded.
 const deskPoint = (role: AgentRole): Point => {
   const agent = AGENTS.find((a) => a.name === role)!;
-  return { x: agent.x, y: role === "Coordinator" ? 152 : agent.y + 46 };
+  return { x: agent.x, y: role === "Coordinator" ? 158 : agent.y + 46 };
 };
 const doorway = (role: AgentRole): Point => {
   const index = AGENTS.findIndex((a) => a.name === role) - 1;
@@ -616,9 +616,6 @@ export default function PixelOffice({
               strokeWidth="7"
             />
             <path d="M28 36h1444" stroke="#edc477" strokeWidth="11" />
-            <text x="52" y="67" className="svg-label">
-              CEO COORDINATOR · WAR ROOM
-            </text>
             <rect
               x="90"
               y="88"
@@ -630,14 +627,22 @@ export default function PixelOffice({
             />
             <rect
               x="154"
-              y="52"
+              y="46"
               width="70"
               height="38"
               fill="#294456"
               stroke="#1f2d35"
               strokeWidth="4"
             />
-            <rect x="166" y="61" width="46" height="20" fill="#8ec8bb" />
+            <rect x="166" y="55" width="46" height="20" fill="#8ec8bb" />
+            <text
+              x="52"
+              y="67"
+              className="svg-label"
+              style={{ position: "relative", zIndex: 10 }}
+            >
+              CEO COORDINATOR · WAR ROOM
+            </text>
             <rect
               x="450"
               y="72"
@@ -747,24 +752,30 @@ export default function PixelOffice({
               strokeWidth="5"
             />
             <rect
-              x="1190"
-              y="725"
-              width="125"
+              x="1210"
+              y="720"
+              width="110"
               height="65"
               fill="#4f6f6c"
               stroke="#293a3e"
               strokeWidth="5"
             />
-            <rect x="1213" y="740" width="79" height="20" fill="#e2c17a" />
+            <rect x="1225" y="734" width="80" height="20" fill="#e2c17a" />
+            <text
+              x="1265"
+              y="748"
+              textAnchor="middle"
+              className="svg-note"
+              style={{ fill: "#3a2d21", fontWeight: "700" }}
+            >
+              VEND
+            </text>
             <path
               d="M505 844q-32-74-65 0m38-27q-5-49-27-57m24 54q31-46 52-35m810 65q-32-74-65 0m38-27q-5-49-27-57m24 54q31-46 52-35"
               fill="none"
               stroke="#76a46e"
               strokeWidth="10"
             />
-            <text x="1330" y="747" className="svg-note">
-              VEND
-            </text>
             <path
               d="M502 210v465M997 210v465"
               stroke="#f3e4c4"

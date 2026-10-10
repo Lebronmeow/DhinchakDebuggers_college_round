@@ -1,0 +1,479 @@
+/* ==========================================================================
+   Station Command Deck & Operations Console (Retro Industrial / Nexus Aesthetic)
+   ========================================================================== */
+
+.nx-command-deck {
+  background: #faf7ee;
+  border: 1px solid #e3dccb;
+  border-radius: 12px;
+  padding: 22px 26px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  box-shadow: 0 4px 14px rgba(70, 60, 45, 0.04);
+}
+
+.nx-deck-brand {
+  max-width: 640px;
+}
+
+.nx-deck-beacon {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+
+.nx-deck-lamp {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4cbf72;
+  box-shadow: 0 0 0 3px rgba(76, 191, 114, 0.25);
+  animation: pulse-beacon 2s infinite;
+}
+
+@keyframes pulse-beacon {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(76, 191, 114, 0.4);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 5px rgba(76, 191, 114, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(76, 191, 114, 0);
+  }
+}
+
+.nx-deck-status {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #786e5c;
+  font-family: ui-monospace, monospace;
+}
+
+.nx-deck-brand h2 {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #29251f;
+  margin: 0 0 5px;
+}
+
+.nx-deck-brand p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #8c816f;
+  margin: 0;
+}
+
+.nx-deck-dials {
+  display: flex;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.nx-deck-gauge {
+  background: #fffcf5;
+  border: 1px solid #e5dcce;
+  border-radius: 8px;
+  padding: 10px 16px;
+  min-width: 135px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 4px rgba(70, 60, 45, 0.02);
+}
+
+.nx-gauge-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #9e927f;
+  font-family: ui-monospace, monospace;
+}
+
+.nx-gauge-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.nx-gauge-num {
+  font-size: 19px;
+  font-weight: 800;
+  color: #29251f;
+  line-height: 1;
+}
+
+.nx-gauge-bar {
+  width: 100%;
+  height: 5px;
+  background: #ece3d2;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.nx-gauge-fill {
+  height: 100%;
+  background: #50a0ad;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* 6 Station Console Meters Grid */
+.nx-station-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 960px) {
+  .nx-station-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.nx-station-card {
+  background: #faf7ee;
+  border: 1px solid #e3dccb;
+  border-radius: 10px;
+  padding: 15px 18px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 6px rgba(70, 60, 45, 0.03);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.nx-station-card:hover {
+  transform: translateY(-2px);
+  border-color: #d1c5b0;
+  box-shadow: 0 5px 12px rgba(70, 60, 45, 0.07);
+}
+
+.nx-station-card.nx-station-crm {
+  border-left: 4px solid #a37bd0;
+}
+.nx-station-card.nx-station-web {
+  border-left: 4px solid #50a0ad;
+}
+.nx-station-card.nx-station-events {
+  border-left: 4px solid #d6b954;
+}
+.nx-station-card.nx-station-reach {
+  border-left: 4px solid #e77761;
+}
+.nx-station-card.nx-station-rev {
+  border-left: 4px solid #4cbf72;
+}
+.nx-station-card.nx-station-ai {
+  border-left: 4px solid #3c6edb;
+}
+
+.nx-station-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.nx-station-channel {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #968a77;
+  font-family: ui-monospace, monospace;
+}
+
+.nx-station-tag {
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #ece5d5;
+  color: #6d6352;
+  letter-spacing: 0.06em;
+}
+
+.nx-tag-crm {
+  background: #f1e9fb;
+  color: #7b4eb2;
+}
+
+.nx-tag-web {
+  background: #e4f4f6;
+  color: #357a85;
+}
+
+.nx-tag-events {
+  background: #fbf5df;
+  color: #967d26;
+}
+
+.nx-tag-reach {
+  background: #fcece8;
+  color: #b54a33;
+}
+
+.nx-tag-rev {
+  background: #e6f7ec;
+  color: #2c854c;
+}
+
+.nx-tag-ai {
+  background: #e7effd;
+  color: #2b55b5;
+}
+
+.nx-station-body {
+  margin-bottom: 8px;
+}
+
+.nx-station-figure {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #29251f;
+  line-height: 1.1;
+  margin-bottom: 3px;
+}
+
+.nx-station-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b4438;
+}
+
+.nx-station-footer {
+  font-size: 11px;
+  color: #8c816f;
+  line-height: 1.35;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Charts Grid (Version 2 - Colorful Horizontal Funnel + 14-Day Catmull-Rom Area)
+   ========================================================================== */
+
+.nx-dashboard-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 1024px) {
+  .nx-dashboard-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.nx-chart-card {
+  background: #faf7ee;
+  border: 1px solid #e3dccb;
+  border-radius: 12px;
+  padding: 22px 24px;
+  box-shadow: 0 3px 10px rgba(70, 60, 45, 0.03);
+  display: flex;
+  flex-direction: column;
+}
+
+.nx-chart-header {
+  margin-bottom: 16px;
+}
+
+.nx-chart-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.nx-chart-eyebrow {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  display: block;
+  color: #786e5c;
+  font-family: ui-monospace, monospace;
+}
+
+.nx-chart-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #29251f;
+  margin: 0 0 4px;
+}
+
+.nx-chart-sub {
+  font-size: 12px;
+  color: #8c816f;
+  margin: 0;
+}
+
+.nx-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nx-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #3d372c;
+}
+
+.nx-legend-color {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.nx-funnel-container,
+.nx-telemetry-container {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nx-funnel-svg,
+.nx-telemetry-svg {
+  width: 100%;
+  height: auto;
+  max-height: 290px;
+  cursor: crosshair;
+  overflow: visible;
+}
+
+.nx-funnel-bar-group {
+  transition: opacity 0.15s ease;
+}
+
+.nx-funnel-bar-group:hover {
+  opacity: 0.85;
+}
+
+.nx-funnel-bar {
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Pie / Donut Chart Styles
+   ========================================================================== */
+
+.nx-pie-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex: 1;
+  padding: 8px 0;
+}
+
+@media (max-width: 600px) {
+  .nx-pie-container {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+.nx-pie-visual {
+  width: 220px;
+  height: 220px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nx-pie-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nx-pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.nx-pie-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #fffcf5;
+  border: 1px solid #e7dfce;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.nx-pie-legend-row:hover,
+.nx-pie-row-active {
+  background: #f5eedf;
+  border-color: #d1c5b0;
+  transform: translateX(3px);
+}
+
+.nx-pie-legend-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nx-pie-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.nx-pie-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #383329;
+}
+
+.nx-pie-legend-right {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.nx-pie-val {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #29251f;
+}
+
+.nx-pie-pct {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #8c816f;
+}
+
