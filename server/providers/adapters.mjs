@@ -23,8 +23,13 @@ function safeBase(value) {
   try {
     const url = new URL(value);
     const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    const privateNet =
+      /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})$/.test(
+        url.hostname,
+      );
     if (
-      (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) ||
+      (url.protocol !== "https:" &&
+        !(url.protocol === "http:" && (loopback || privateNet))) ||
       url.username ||
       url.password ||
       url.search ||
@@ -198,7 +203,8 @@ export function filterFreeModels(models) {
     (model) =>
       model.free === true &&
       !model.id.toLowerCase().includes("nvidia") &&
-      !(typeof model.name === "string" && model.name.toLowerCase().includes("nvidia")),
+      !(typeof model.name === "string" && model.name.toLowerCase().includes("nvidia")) &&
+      model.id !== "openrouter/free",
   );
 }
 
@@ -207,7 +213,12 @@ function normalizeRemoteModel(model) {
   const idLower = model.id.toLowerCase();
   const nameLower =
     typeof model.name === "string" ? model.name.toLowerCase() : "";
-  if (idLower.includes("nvidia") || nameLower.includes("nvidia")) return null;
+  if (
+    idLower.includes("nvidia") ||
+    nameLower.includes("nvidia") ||
+    idLower === "openrouter/free"
+  )
+    return null;
   const zero = (v) =>
     (typeof v === "string" || typeof v === "number") &&
     String(v).trim() !== "" &&
@@ -231,7 +242,15 @@ export function createProviderService({
   env = process.env,
 } = {}) {
   // Capture server env once. Request bodies can never select endpoints or credentials.
-  const base = safeBase(env.OPENAI_COMPATIBLE_BASE_URL);
+  const rawBases = [
+    ...(env.OPENAI_COMPATIBLE_BASE_URL || "").split(","),
+    ...(env.OPENAI_COMPATIBLE_BASE_URL_2 || "").split(","),
+  ]
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const bases = rawBases.map(safeBase).filter(Boolean);
+  const base = bases[0] || null;
+  const modelEndpointMap = new Map();
   const configs = {
     ollama: { base: OLLAMA, configured: true, key: "" },
     openrouter: {
@@ -253,6 +272,7 @@ export function createProviderService({
   };
   const headers = (c) => ({
     "content-type": "application/json",
+    "bypass-tunnel-reminder": "true",
     ...(c.key ? { authorization: `Bearer ${c.key}` } : {}),
   });
   const status = () =>
@@ -270,9 +290,45 @@ export function createProviderService({
   async function models(id, { signal } = {}) {
     // OpenRouter's public catalog needs no inference key; discovery stays useful before setup.
     const c = id === "openrouter" ? configs.openrouter : config(id);
+    if (id === "openai-compatible" && bases.length > 1) {
+      const allItems = [];
+      for (const endpointBase of bases) {
+        try {
+          const modelUrl = !endpointBase.endsWith("/v1")
+            ? `${endpointBase}/v1/models`
+            : `${endpointBase}/models`;
+          const data = await requestJSON(
+            providerFetch,
+            modelUrl,
+            { headers: headers(c) },
+            { signal, maxBytes: 8 * 1024 * 1024 },
+          );
+          if (Array.isArray(data?.data)) {
+            for (const item of data.data) {
+              if (item?.id) {
+                modelEndpointMap.set(item.id, endpointBase);
+                allItems.push(item);
+              }
+            }
+          }
+        } catch {
+          // If a remote worker is offline or restarting, keep other nodes functional
+        }
+      }
+      return allItems
+        .slice(0, 2000)
+        .map(normalizeRemoteModel)
+        .filter(Boolean);
+    }
+    const modelUrl =
+      id === "ollama"
+        ? `${c.base}/api/tags`
+        : id === "openai-compatible" && !c.base.endsWith("/v1")
+          ? `${c.base}/v1/models`
+          : `${c.base}/models`;
     const data = await requestJSON(
       id === "ollama" ? ollamaFetch : providerFetch,
-      `${c.base}/${id === "ollama" ? "api/tags" : "models"}`,
+      modelUrl,
       { headers: headers(c) },
       { signal, maxBytes: 8 * 1024 * 1024 },
     );
@@ -306,32 +362,42 @@ export function createProviderService({
       { role: "system", content: system },
       { role: "user", content: user },
     ];
-    const body =
-      id === "ollama"
-        ? {
-            model,
-            stream: false,
-            think: false,
-            format: schema,
-            options: { num_ctx: 4096, num_predict: 1400, temperature: 0.15 },
-            messages,
-          }
-        : {
-            model,
-            stream: false,
-            temperature: 0.15,
-            max_tokens: 1400,
-            messages,
-            response_format: {
-              type: "json_schema",
-              json_schema: { name: "orchestra_response", strict: true, schema },
-            },
-          };
-    let data;
-    try {
-      data = await requestJSON(
+
+    const executeAttempt = async (targetModel) => {
+      const body =
+        id === "ollama"
+          ? {
+              model: targetModel,
+              stream: false,
+              think: false,
+              format: schema,
+              options: { num_ctx: 4096, num_predict: 1400, temperature: 0.15 },
+              messages,
+            }
+          : {
+              model: targetModel,
+              stream: false,
+              temperature: 0.15,
+              max_tokens: 1400,
+              messages,
+              response_format: {
+                type: "json_schema",
+                json_schema: { name: "orchestra_response", strict: true, schema },
+              },
+            };
+      const effectiveBase =
+        id === "openai-compatible"
+          ? modelEndpointMap.get(targetModel) || c.base
+          : c.base;
+      const chatUrl =
+        id === "ollama"
+          ? `${c.base}/api/chat`
+          : id === "openai-compatible" && !effectiveBase.endsWith("/v1")
+            ? `${effectiveBase}/v1/chat/completions`
+            : `${effectiveBase}/chat/completions`;
+      const data = await requestJSON(
         id === "ollama" ? ollamaFetch : providerFetch,
-        `${c.base}/${id === "ollama" ? "api/chat" : "chat/completions"}`,
+        chatUrl,
         {
           method: "POST",
           headers: headers(c),
@@ -339,66 +405,56 @@ export function createProviderService({
         },
         { signal, timeoutMs: 120000 },
       );
+      const content =
+        id === "ollama"
+          ? data?.message?.content
+          : data?.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim())
+        throw new Error("Provider returned no message content");
+      const cleaned = cleanJSON(content);
+      const parsed = JSON.parse(cleaned);
+      validate(parsed, schema);
+      return parsed;
+    };
+
+    try {
+      return await executeAttempt(model);
     } catch (err) {
-      if (
-        id === "openrouter" &&
-        model !== "openrouter/free" &&
-        !signal?.aborted &&
-        !/canceled/i.test(err.message)
-      ) {
-        body.model = "openrouter/free";
-        data = await requestJSON(
-          providerFetch,
-          `${c.base}/chat/completions`,
-          {
-            method: "POST",
-            headers: headers(c),
-            body: JSON.stringify(body),
-          },
-          { signal, timeoutMs: 120000 },
-        );
-      } else {
+      if (signal?.aborted || /canceled/i.test(err.message)) {
         throw err;
       }
-    }
-    let content =
-      id === "ollama"
-        ? data?.message?.content
-        : data?.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || !content.trim())
-      throw new Error("Provider returned no message content");
-    let parsed;
-    try {
-      parsed = JSON.parse(cleanJSON(content));
-      validate(parsed, schema);
-    } catch (parseErr) {
-      if (
-        id === "openrouter" &&
-        model !== "openrouter/free" &&
-        !signal?.aborted
-      ) {
-        body.model = "openrouter/free";
-        const retryData = await requestJSON(
-          providerFetch,
-          `${c.base}/chat/completions`,
-          {
-            method: "POST",
-            headers: headers(c),
-            body: JSON.stringify(body),
-          },
-          { signal, timeoutMs: 120000 },
-        );
-        try {
-          parsed = JSON.parse(cleanJSON(content));
-          validate(parsed, schema);
-        } catch {
-          throw new Error("Provider returned invalid structured JSON");
+      if (id === "openrouter") {
+        const fallbackTarget =
+          model === "inclusionai/ling-3.1-flash"
+            ? "dots-studio/dots-3-note-preview:free"
+            : "inclusionai/ling-3.1-flash";
+        if (model !== fallbackTarget) {
+          try {
+            return await executeAttempt(fallbackTarget);
+          } catch (fallbackErr) {
+            if (signal?.aborted || /canceled/i.test(fallbackErr.message)) {
+              throw fallbackErr;
+            }
+            if (
+              /no message content/i.test(fallbackErr.message) ||
+              /JSON/i.test(fallbackErr.message) ||
+              fallbackErr instanceof SyntaxError
+            ) {
+              throw new Error("Provider returned invalid structured JSON");
+            }
+            throw fallbackErr;
+          }
         }
-      } else {
+      }
+      if (
+        /no message content/i.test(err.message) ||
+        /JSON/i.test(err.message) ||
+        err instanceof SyntaxError
+      ) {
         throw new Error("Provider returned invalid structured JSON");
       }
+      throw err;
     }
-    return parsed;
   }
 
   async function probe(id, model) {

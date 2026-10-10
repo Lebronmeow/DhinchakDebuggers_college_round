@@ -31,7 +31,7 @@ const date = (v: string) =>
       })
     : "Date not set";
 const iso = (v: string) => (v ? new Date(v).toISOString() : undefined);
-const money = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+const money = (n: number) => `$${n.toLocaleString("en-US")}`;
 function Button({
   children,
   onClick,
@@ -1030,7 +1030,7 @@ function Webinars({ p }: { p: ModuleProps }) {
       }
     >
       <div className="nx-notice">
-        Live room is not configured here. Attendance is always manual.
+        Integrated with Jitsi Meet Live Video API. Attendees receive instant access links and automated invites from meowlover102@gmail.com.
       </div>
       <div className="nx-cards">
         {p.state.webinars.map((w) => (
@@ -1044,20 +1044,34 @@ function Webinars({ p }: { p: ModuleProps }) {
             <h3>{w.title}</h3>
             <p>{w.description}</p>
             <small>{date(w.startsAt)}</small>
-            <Button quiet onClick={() => begin(w)}>
-              <Settings2 size={14} />
-              Configure / edit
-            </Button>
-            {/^https?:\/\//i.test(w.joinUrl) && (
-              <a
-                className="nx-link"
-                href={w.joinUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open room <ExternalLink size={13} />
-              </a>
-            )}
+            <div className="nx-card-actions">
+              <Button quiet onClick={() => begin(w)}>
+                <Settings2 size={14} />
+                Configure / edit
+              </Button>
+              {/^https?:\/\//i.test(w.joinUrl) ? (
+                <a
+                  className="nx-link nx-room-btn"
+                  href={w.joinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  🎥 Launch Live Room (Jitsi) <ExternalLink size={13} />
+                </a>
+              ) : (
+                <Button
+                  quiet
+                  onClick={() =>
+                    run(
+                      () => api(`/webinars/${w.id}/generate-room`, "POST"),
+                      "Live Jitsi webinar room generated",
+                    )
+                  }
+                >
+                  + Generate Live Room
+                </Button>
+              )}
+            </div>
             <div className="nx-register">
               <label>
                 Register existing contact
@@ -1094,27 +1108,33 @@ function Webinars({ p }: { p: ModuleProps }) {
                 Register
               </Button>
             </div>
-            {w.registrations.map((r) => (
-              <div className="nx-register-row" key={r.contactId}>
-                {p.state.contacts.find((c) => c.id === r.contactId)?.name ||
-                  "Unknown"}
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () =>
-                        api(`/webinars/${w.id}/attendance`, "POST", {
-                          contactId: r.contactId,
-                          attended: !r.attended,
-                        }),
-                      r.attended ? "Marked absent" : "Attendance marked",
-                    )
-                  }
-                >
-                  {r.attended ? "Attended" : "Mark attendance"}
-                </button>
+            {w.registrations.length > 0 && (
+              <div className="nx-attendees-scroll">
+                {w.registrations.map((r) => (
+                  <div className="nx-register-row" key={r.contactId}>
+                    <span>
+                      {p.state.contacts.find((c) => c.id === r.contactId)?.name ||
+                        "Unknown"}
+                    </span>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        run(
+                          () =>
+                            api(`/webinars/${w.id}/attendance`, "POST", {
+                              contactId: r.contactId,
+                              attended: !r.attended,
+                            }),
+                          r.attended ? "Marked absent" : "Attendance marked",
+                        )
+                      }
+                    >
+                      {r.attended ? "Attended" : "Mark attendance"}
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </article>
         ))}
       </div>
@@ -1308,7 +1328,7 @@ function Billing({ p }: { p: ModuleProps }) {
   return (
     <Shell eyebrow="Sandbox commerce" title="Billing">
       <div className="nx-notice">
-        Sandbox records only. No payment is collected.
+        Sandbox Checkout Active. Registrations on published website pages automatically process $49.00 test cards, upgrade contacts to customers, and record subscriptions here.
       </div>
       <div className="nx-plan-grid">
         {p.state.plans.map((x) => (

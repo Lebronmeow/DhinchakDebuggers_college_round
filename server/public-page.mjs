@@ -22,8 +22,8 @@ export function renderPublicPage(page, options = {}) {
       <div class="card-inner">
         <span class="eyebrow-pill">RESERVE YOUR SPOT</span>
         <h2>Join this exclusive session.</h2>
-        <p class="card-subhead">Register your interest below to secure your place. Space is strictly limited.</p>
-        <form method="post" action="/p/${escape(page.slug)}/register" class="reg-form">
+        <p class="card-subhead">Register below to secure your place. Includes live video room access and instant receipt.</p>
+        <form method="post" action="/p/${escape(page.slug)}/register" class="reg-form" id="checkout-form">
           <div class="field-group">
             <label for="name">Full Name</label>
             <div class="input-wrap">
@@ -36,19 +36,53 @@ export function renderPublicPage(page, options = {}) {
               <input id="email" name="email" type="email" autocomplete="email" required placeholder="alex@example.com">
             </div>
           </div>
+
+          <div class="payment-box">
+            <div class="payment-header">
+              <span class="payment-badge">SANDBOX CHECKOUT</span>
+              <span class="payment-price">Access Pass: <strong>$49.00</strong></span>
+            </div>
+            <p class="payment-sub">Test Mode: Instant verification · Billed in Nexus Sandbox</p>
+            <div class="field-group" style="margin-bottom: 12px;">
+              <label for="cardNumber">Card Details (Pre-filled Test Card)</label>
+              <div class="input-wrap card-input-wrap">
+                <input id="cardNumber" name="cardNumber" maxlength="19" value="4242 •••• •••• 4242" required readonly>
+                <span class="card-chip">💳 VISA</span>
+              </div>
+            </div>
+            <div class="card-meta-row">
+              <div class="field-group" style="flex: 1; margin-bottom: 0;">
+                <label for="cardExp">Expires</label>
+                <div class="input-wrap">
+                  <input id="cardExp" name="cardExp" value="12/28" required readonly>
+                </div>
+              </div>
+              <div class="field-group" style="flex: 1; margin-bottom: 0;">
+                <label for="cardCvc">CVC</label>
+                <div class="input-wrap">
+                  <input id="cardCvc" name="cardCvc" value="123" required readonly>
+                </div>
+              </div>
+            </div>
+            <input type="hidden" name="amount" value="49">
+            <input type="hidden" name="paymentMethod" value="sandbox_card_4242">
+          </div>
+
           <label class="consent-label">
-            <input type="checkbox" name="consent">
-            <span>I agree to receive event updates, relevant materials, and schedule announcements.</span>
+            <input type="checkbox" name="consent" checked>
+            <span>I agree to receive event updates, webinar links from meowlover102@gmail.com, and schedule announcements.</span>
           </label>
-          <button type="submit" class="submit-btn">
-            <span>Confirm Registration</span>
+          <button type="submit" class="submit-btn" id="pay-btn">
+            <span>⚡ Pay $49.00 (Test) &amp; Confirm Spot</span>
             <span class="btn-arrow">→</span>
           </button>
         </form>
         <div class="trust-footer">
-          <span>🔒 Verified by Nexus Local Engine</span>
+          <span>🔒 Sandbox Card Processing</span>
           <span>•</span>
-          <span>Instant RSVP Confirmation</span>
+          <span>Invites dispatched from meowlover102@gmail.com</span>
+          <span>•</span>
+          <span>Instant Jitsi Live Room</span>
         </div>
       </div>
     </section>
@@ -385,6 +419,61 @@ export function renderPublicPage(page, options = {}) {
       background: #ffffff;
       border-color: var(--accent);
       box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+    .payment-box {
+      background: var(--bg);
+      border: 1px solid var(--surface-border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin: 22px 0;
+    }
+    .payment-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .payment-badge {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: #e2f0d9;
+      color: #276738;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .payment-price {
+      font-size: 14px;
+      color: var(--text-main);
+    }
+    .payment-price strong {
+      font-size: 16px;
+      color: var(--accent);
+    }
+    .payment-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .card-input-wrap {
+      position: relative;
+    }
+    .card-chip {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      font-weight: 700;
+      color: #1a3c6e;
+      background: #eaf1fb;
+      padding: 3px 8px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+    .card-meta-row {
+      display: flex;
+      gap: 12px;
     }
     .consent-label {
       display: flex;

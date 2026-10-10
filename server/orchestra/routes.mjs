@@ -47,7 +47,10 @@ export async function registerOrchestraRoutes(
           : "ollama";
     }
     if (!model) {
-      model = providerId === "openrouter" ? "openrouter/free" : "qwen";
+      model =
+        providerId === "openrouter"
+          ? DEFAULT_EMPLOYEE_MODELS.Coordinator
+          : "qwen";
     }
     const agentModels =
       typeof req.body?.agentModels === "object" && req.body?.agentModels !== null
@@ -55,6 +58,11 @@ export async function registerOrchestraRoutes(
         : providerId === "openrouter"
           ? DEFAULT_EMPLOYEE_MODELS
           : null;
+    const agentProviders =
+      typeof req.body?.agentProviders === "object" &&
+      req.body?.agentProviders !== null
+        ? req.body.agentProviders
+        : null;
     if (!prompt || prompt.length > 4000 || !model || model.length > 200)
       return res
         .status(400)
@@ -93,6 +101,7 @@ export async function registerOrchestraRoutes(
         req.socket.localPort,
         providerId,
         agentModels,
+        agentProviders,
       );
       return res.status(202).json(run);
     } catch (error) {

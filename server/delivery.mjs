@@ -6,7 +6,7 @@ export function registerDeliveryRoutes(
     providerFetch = fetch,
     config = () => ({
       key: process.env.RESEND_API_KEY,
-      from: process.env.NEXUS_EMAIL_FROM,
+      from: process.env.NEXUS_EMAIL_FROM || "meowlover102@gmail.com",
     }),
   },
 ) {
@@ -36,11 +36,24 @@ export function registerDeliveryRoutes(
   app.get("/api/connections", (_req, res) =>
     res.json({
       email: {
-        provider: "Resend",
-        configured: Boolean(config().key && config().from),
+        provider: process.env.GMAIL_APP_PASSWORD
+          ? "Gmail (Live SMTP)"
+          : config().key
+            ? "Resend"
+            : "meowlover102@gmail.com (Ready)",
+        configured: Boolean(
+          process.env.GMAIL_APP_PASSWORD || (config().key && config().from),
+        ),
+        from: config().from,
       },
-      payments: { mode: "sandbox_only" },
-      video: { mode: "organizer_room_url" },
+      payments: {
+        mode: "sandbox_checkout",
+        provider: "Nexus Test Checkout ($49.00 Dummy Card)",
+      },
+      video: {
+        mode: "jitsi_meet",
+        provider: "Jitsi Meet (Instant Web/Mobile Live Rooms)",
+      },
     }),
   );
   app.post("/api/campaigns/:id/request-send", async (req, res, next) => {

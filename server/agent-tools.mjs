@@ -44,6 +44,8 @@ export const businessToolCatalog = [
         items: { type: "string", enum: ["hero", "details", "registration"] },
       },
       webinarId: str("Optional existing webinar ID to connect registration"),
+      linkedWebinarId: str("Optional existing webinar ID to connect registration"),
+      capacity: { type: "integer", minimum: 1, maximum: 100000 },
       status: str("Optional page status such as draft"),
     },
     ["title"],
@@ -65,6 +67,9 @@ export const businessToolCatalog = [
         type: "array",
         items: { type: "string", enum: ["hero", "details", "registration"] },
       },
+      webinarId: str("Optional existing webinar ID to connect registration"),
+      linkedWebinarId: str("Optional existing webinar ID to connect registration"),
+      capacity: { type: "integer", minimum: 1, maximum: 100000 },
     },
     ["id"],
   ),
@@ -111,6 +116,7 @@ export const businessToolCatalog = [
     ["Events"],
     {
       title: str("Event title"),
+      name: str("Event title or name"),
       description: str("Event description"),
       startsAt: str(
         "ISO date-time with timezone, or empty if user did not specify",
@@ -130,6 +136,7 @@ export const businessToolCatalog = [
     {
       id: str("Existing webinar ID"),
       title: str("Title"),
+      name: str("Event title or name"),
       description: str("Description"),
       content: str("Event description or details"),
       startsAt: str("ISO date-time"),
@@ -207,9 +214,23 @@ export const businessToolCatalog = [
   ),
 ];
 
-function validate(def, input) {
-  if (!input || typeof input !== "object" || Array.isArray(input))
+function validate(def, rawInput) {
+  if (!rawInput || typeof rawInput !== "object" || Array.isArray(rawInput))
     throw new Error("Tool arguments must be an object");
+  const input = { ...rawInput };
+  if (input.name && !input.title && "title" in def.parameters.properties) {
+    input.title = input.name;
+  }
+  if (input.title && !input.name && "name" in def.parameters.properties) {
+    input.name = input.title;
+  }
+  if (
+    input.linkedWebinarId &&
+    !input.webinarId &&
+    "webinarId" in def.parameters.properties
+  ) {
+    input.webinarId = input.linkedWebinarId;
+  }
   for (const key of Object.keys(input))
     if (!(key in def.parameters.properties))
       throw new Error(`Unknown argument ${key} for ${def.name}`);
@@ -381,26 +402,34 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
       let record, collection;
       const { id, ...patch } = args;
       switch (name) {
-        case "create_page":
+        case "create_page": {
           collection = "pages";
+          const webinarId = args.webinarId || args.linkedWebinarId;
+          const { capacity: _cap, linkedWebinarId: _lw, ...pageData } = args;
           record = await call("/api/pages", "POST", {
             accent: "#719a65",
             blocks: ["hero", "details", "registration"],
-            ...args,
-            headline: args.headline || args.title,
+            ...pageData,
+            ...(webinarId ? { webinarId } : {}),
+            headline: pageData.headline || pageData.title,
             description:
-              args.description || args.content || args.headline || args.title,
+              pageData.description || pageData.content || pageData.headline || pageData.title,
           });
           break;
-        case "update_page":
+        }
+        case "update_page": {
           collection = "pages";
+          const updateWebinarId = patch.webinarId || patch.linkedWebinarId;
+          const { capacity: _ucap, linkedWebinarId: _ulw, ...updatePatch } = patch;
           record = await call(`/api/pages/${safeId(id)}`, "PATCH", {
-            ...patch,
-            ...(patch.content && !patch.description
-              ? { description: patch.content }
+            ...updatePatch,
+            ...(updateWebinarId ? { webinarId: updateWebinarId } : {}),
+            ...(updatePatch.content && !updatePatch.description
+              ? { description: updatePatch.content }
               : {}),
           });
           break;
+        }
         case "create_contact":
           collection = "contacts";
           record = await call("/api/contacts", "POST", {
@@ -412,30 +441,36 @@ export function createBusinessTools({ store, port, apiFetch = fetch }) {
           collection = "contacts";
           record = await call(`/api/contacts/${safeId(id)}`, "PATCH", patch);
           break;
-        case "create_webinar":
+        case "create_webinar": {
           collection = "webinars";
+          const webinarTitle = args.title || args.name || "Webinar";
           record = await call("/api/webinars", "POST", {
             capacity: 50,
             joinUrl: "",
             ...args,
+            title: webinarTitle,
             startsAt: args.startsAt || args.date || "",
             description:
               args.description ||
               args.content ||
-              args.title ||
+              webinarTitle ||
               "Webinar session",
           });
           break;
-        case "update_webinar":
+        }
+        case "update_webinar": {
           collection = "webinars";
+          const updateTitle = patch.title || patch.name;
           record = await call(`/api/webinars/${safeId(id)}`, "PATCH", {
             ...patch,
+            ...(updateTitle ? { title: updateTitle } : {}),
             ...(patch.date && !patch.startsAt ? { startsAt: patch.date } : {}),
             ...(patch.content && !patch.description
               ? { description: patch.content }
               : {}),
           });
           break;
+        }
         case "register_contact":
           collection = "webinars";
           record = await call(

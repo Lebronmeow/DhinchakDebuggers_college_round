@@ -66,11 +66,11 @@ const isActive = (run?: AgentRun | null) =>
   !!run && ACTIVE.includes(run.status);
 
 export const DEFAULT_EMPLOYEE_MODELS: Record<string, string> = {
-  Coordinator: "openrouter/free",
+  Coordinator: "inclusionai/ling-3.1-flash",
   Website: "liquid/lfm-2.5-2.6b:free",
-  Growth: "google/gemma-4-26b-a4b-it:free",
-  Events: "google/gemma-4-31b-it:free",
-  CRM: "dots-studio/dots-3-note-preview:free",
+  Growth: "thinkingmachines/inkling:free",
+  Events: "dots-studio/dots-3-note-preview:free",
+  CRM: "google/gemma-4-31b-it:free",
   Billing: "poolside/laguna-s-2.1:free",
   Review: "cohere/north-mini-code:free",
 };
@@ -154,6 +154,11 @@ function MessageThread({
               <strong>{message.from}</strong>
               {run.agentModels?.[message.from] && (
                 <span className="oc-role-model-tag">
+                  {run.agentProviders?.[message.from] === "openai-compatible"
+                    ? "Friend GPU · "
+                    : run.agentProviders?.[message.from] === "ollama"
+                      ? "Local GPU · "
+                      : ""}
                   {run.agentModels[message.from].replace(":free", "")}
                 </span>
               )}
@@ -163,6 +168,11 @@ function MessageThread({
               <strong>{message.to}</strong>
               {run.agentModels?.[message.to] && (
                 <span className="oc-role-model-tag">
+                  {run.agentProviders?.[message.to] === "openai-compatible"
+                    ? "Friend GPU · "
+                    : run.agentProviders?.[message.to] === "ollama"
+                      ? "Local GPU · "
+                      : ""}
                   {run.agentModels[message.to].replace(":free", "")}
                 </span>
               )}
@@ -254,21 +264,23 @@ export default function OrchestraConsole({
         const discovered = (catalog.models || []).filter(
           (m) =>
             !m.id.toLowerCase().includes("nvidia") &&
-            !m.name.toLowerCase().includes("nvidia"),
+            !m.name.toLowerCase().includes("nvidia") &&
+            m.id !== "openrouter/free",
         );
         setRoutedModels(discovered);
         const openRouterModels = discovered.filter(
           (m) => m.provider === "openrouter",
         );
-        if (openRouterModels.length) {
-          setProviderId("openrouter");
-          const defaultModel =
-            openRouterModels.find((m) => m.id === "openrouter/free")?.id ||
-            openRouterModels[0].id;
-          setModel(defaultModel);
-        } else if (installed.length) {
+        if (installed.length) {
           setProviderId("ollama");
           setModel(installed[0]);
+        } else if (openRouterModels.length) {
+          setProviderId("openrouter");
+          const defaultModel =
+            openRouterModels.find(
+              (m) => m.id === "inclusionai/ling-3.1-flash",
+            )?.id || openRouterModels[0].id;
+          setModel(defaultModel);
         } else if (discovered.length) {
           setProviderId(discovered[0].provider);
           setModel(discovered[0].id);
@@ -341,11 +353,27 @@ export default function OrchestraConsole({
     setBusy(true);
     setError("");
     try {
+      const agentProviders: Record<string, string> = {};
+      for (const [role, modelId] of Object.entries(employeeModels)) {
+        const found = routedModels.find((m) => m.id === modelId);
+        if (found?.provider) {
+          agentProviders[role] = found.provider;
+        } else {
+          agentProviders[role] = providerId;
+        }
+      }
+      const hasCustomEmployees = Object.entries(employeeModels).some(
+        ([role, m]) => m !== (DEFAULT_EMPLOYEE_MODELS[role] || model),
+      );
       const request: Record<string, unknown> = {
         prompt: text,
         model,
-        ...(providerId !== "ollama"
-          ? { providerId, agentModels: employeeModels }
+        ...(providerId !== "ollama" || hasCustomEmployees
+          ? {
+              providerId,
+              agentModels: employeeModels,
+              agentProviders,
+            }
           : {}),
       };
       const run = await api<AgentRun>("/orchestra/runs", "POST", request);
@@ -451,14 +479,31 @@ export default function OrchestraConsole({
         </label>
         <div className="oc-employee-models">
           <div className="oc-employee-models-head">
-            <strong>Employee AI Team (Distinct free models per role)</strong>
-            <button
-              type="button"
-              className="oc-btn-ghost"
-              onClick={() => setEmployeeModels(DEFAULT_EMPLOYEE_MODELS)}
-            >
-              Reset to defaults
-            </button>
+            <strong>Employee AI Team (GPU Specialist Assignment)</strong>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              {models.length > 0 && (
+                <button
+                  type="button"
+                  className="oc-btn-ghost"
+                  onClick={() => {
+                    const localAll: Record<string, string> = {};
+                    for (const role of Object.keys(DEFAULT_EMPLOYEE_MODELS)) {
+                      localAll[role] = models[0];
+                    }
+                    setEmployeeModels(localAll);
+                  }}
+                >
+                  Use Local GPU for all
+                </button>
+              )}
+              <button
+                type="button"
+                className="oc-btn-ghost"
+                onClick={() => setEmployeeModels(DEFAULT_EMPLOYEE_MODELS)}
+              >
+                Reset to defaults
+              </button>
+            </div>
           </div>
           <div className="oc-employee-grid">
             {Object.entries(employeeModels).map(([role, assignedModel]) => (
@@ -476,13 +521,25 @@ export default function OrchestraConsole({
                 >
                   {routedModels
                     .filter(
-                      (m) => m.free && !m.id.toLowerCase().includes("nvidia"),
+                      (m) =>
+                        (m.free ||
+                          m.provider === "ollama" ||
+                          m.provider === "openai-compatible") &&
+                        !m.id.toLowerCase().includes("nvidia"),
                     )
-                    .map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name || m.id}
-                      </option>
-                    ))}
+                    .map((m) => {
+                      const prefix =
+                        m.provider === "ollama"
+                          ? "[Local GPU] "
+                          : m.provider === "openai-compatible"
+                            ? "[Friend GPU] "
+                            : "";
+                      return (
+                        <option key={`${m.provider}-${m.id}`} value={m.id}>
+                          {prefix}{m.name || m.id}
+                        </option>
+                      );
+                    })}
                   {!routedModels.some((m) => m.id === assignedModel) && (
                     <option value={assignedModel}>{assignedModel}</option>
                   )}

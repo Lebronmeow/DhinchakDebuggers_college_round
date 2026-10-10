@@ -11,11 +11,11 @@ const roles = new Set([
   "Review",
 ]);
 export const DEFAULT_EMPLOYEE_MODELS = {
-  Coordinator: "openrouter/free",
+  Coordinator: "inclusionai/ling-3.1-flash",
   Website: "liquid/lfm-2.5-2.6b:free",
-  Growth: "google/gemma-4-26b-a4b-it:free",
-  Events: "google/gemma-4-31b-it:free",
-  CRM: "dots-studio/dots-3-note-preview:free",
+  Growth: "thinkingmachines/inkling:free",
+  Events: "dots-studio/dots-3-note-preview:free",
+  CRM: "google/gemma-4-31b-it:free",
   Billing: "poolside/laguna-s-2.1:free",
   Review: "cohere/north-mini-code:free",
 };
@@ -122,7 +122,9 @@ export function createOrchestraEngine({
           providerService?.askProvider ||
           ((_, args) => askOllama(ollamaFetch, args));
         const coordModel = run.agentModels?.Coordinator || run.model;
-        const plan = await ask(run.providerId || "ollama", {
+        const coordProvider =
+          run.agentProviders?.Coordinator || run.providerId || "ollama";
+        const plan = await ask(coordProvider, {
           model: coordModel,
           system: coordinatorSystem,
           user: run.prompt,
@@ -251,8 +253,11 @@ export function createOrchestraEngine({
         providerService?.askProvider ||
         ((_, args) => askOllama(ollamaFetch, args));
       const specModel = run.agentModels?.[task.agent] || run.model;
+      const specProvider =
+        run.agentProviders?.[task.agent] || run.providerId || "ollama";
       task.model = specModel;
-      const result = await ask(run.providerId || "ollama", {
+      task.provider = specProvider;
+      const result = await ask(specProvider, {
         model: specModel,
         system: specialistSystem(task.agent, catalog),
         user: JSON.stringify({
@@ -445,6 +450,7 @@ export function createOrchestraEngine({
       port,
       providerId = "ollama",
       agentModels = null,
+      agentProviders = null,
     ) {
       const run = {
         id: `run_${crypto.randomUUID()}`,
@@ -454,6 +460,7 @@ export function createOrchestraEngine({
         agentModels:
           agentModels ||
           (providerId === "openrouter" ? { ...DEFAULT_EMPLOYEE_MODELS } : {}),
+        agentProviders: agentProviders || {},
         title: "Planning…",
         status: "queued",
         tasks: [],

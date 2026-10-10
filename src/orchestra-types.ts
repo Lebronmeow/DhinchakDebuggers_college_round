@@ -31,6 +31,7 @@ export interface AgentTask {
   status: string;
   summary?: string;
   model?: string;
+  provider?: string;
 }
 export interface ToolReceipt {
   id: string;
@@ -51,6 +52,7 @@ export interface AgentRun {
   model: string;
   providerId?: string;
   agentModels?: Record<string, string>;
+  agentProviders?: Record<string, string>;
   title: string;
   status: RunStatus;
   tasks: AgentTask[];
