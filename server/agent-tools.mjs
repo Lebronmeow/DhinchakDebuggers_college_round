@@ -19,6 +19,14 @@ export const businessToolCatalog = [
     "inspect_workspace",
     "Read real record IDs, existing content, approvals, and provider availability. Use before selecting IDs or verifying results.",
     ROLES,
+    {
+      agents: {
+        type: "array",
+        items: { type: "string", enum: ROLES },
+        maxItems: ROLES.length,
+      },
+    },
+    [],
   ),
   tool(
     "create_page",

@@ -374,6 +374,18 @@ export function createOrchestraEngine({ store, ollamaFetch, createTools }) {
       }
       successfulReceipt = true;
       message(run, result.tool, task.agent, saved.message, "tool");
+      const instruction = task.instruction.toLowerCase();
+      const standaloneCreate =
+        /^create_(webinar|contact|sandbox_subscription)$/.test(result.tool) &&
+        !/(then|after|next|link|register|configure|publish|update|verify|review|page|campaign)/.test(
+          instruction,
+        );
+      if (standaloneCreate) {
+        task.status = "completed";
+        task.summary = `${saved.message} Task completed from the verified receipt.`;
+        await persist(run);
+        return;
+      }
     }
     if (!successfulReceipt)
       throw new Error(
