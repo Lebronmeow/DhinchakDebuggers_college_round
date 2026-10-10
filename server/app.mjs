@@ -1,0 +1,854 @@
+import express from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { createStore, now } from "./store.mjs";
+import { renderPublicPage } from "./public-page.mjs";
+
+const STAGES = new Set(["lead", "qualified", "customer"]);
+const CONTENT_FIELDS = [
+  "title",
+  "headline",
+  "description",
+  "emailSubject",
+  "emailBody",
+];
+const text = (v, name, required = true, max = 2000) => {
+  if (required && (typeof v !== "string" || !v.trim()))
+    throw new Error(`${name} is required`);
+  if (v != null && typeof v !== "string")
+    throw new Error(`${name} must be text`);
+  if (v && v.length > max) throw new Error(`${name} is too long`);
+  return v?.trim() ?? "";
+};
+const email = (v) => {
+  const value = text(v, "email").toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(value)) throw new Error("email is invalid");
+  return value;
+};
+const stage = (v) => {
+  const value = text(v, "stage");
+  if (!STAGES.has(value)) throw new Error("stage is invalid");
+  return value;
+};
+const integer = (v, name, min = 1, max = 100000) => {
+  if (!Number.isInteger(v) || v < min || v > max)
+    throw new Error(`${name} is invalid`);
+  return v;
+};
+const iso = (v, name) => {
+  const value = text(v, name);
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) ||
+    Number.isNaN(Date.parse(value))
+  )
+    throw new Error(`${name} is invalid`);
+  return new Date(value).toISOString();
+};
+const url = (v, name = "joinUrl") => {
+  const value = text(v, name, false, 500);
+  if (value) {
+    let parsed;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new Error(`${name} is invalid`);
+    }
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password
+    )
+      throw new Error(`${name} must use http or https without credentials`);
+  }
+  return value;
+};
+const esc = (v) =>
+  String(v ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+const accent = (v) => {
+  const value = text(v, "accent");
+  if (!/^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value))
+    throw new Error("accent must be a hex color");
+  return value;
+};
+const find = (arr, id, label = "record") => {
+  const item = arr.find((x) => x.id === id);
+  if (!item)
+    throw Object.assign(new Error(`${label} not found`), { status: 404 });
+  return item;
+};
+const clone = (value) => structuredClone(value);
+const localOrigin = (req) => {
+  const origin = req.get("origin");
+  return !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+};
+const localHost = (req) =>
+  /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(req.get("host") || "");
+const consent = (v) => v === true || v === "on" || v === "true" || v === "1";
+const slug = (title, store) =>
+  `${title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 50)}-${store.id("x").slice(-6)}`;
+
+export async function createApp({
+  dataDir = path.join(process.cwd(), "data"),
+  distDir = path.join(process.cwd(), "dist"),
+  ollamaFetch = fetch,
+} = {}) {
+  const store = createStore(dataDir);
+  await store.init();
+  const app = express();
+  app.disable("x-powered-by");
+  app.use(express.json({ limit: "64kb" }));
+  app.use(express.urlencoded({ extended: false, limit: "32kb" }));
+  app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    if (req.path.startsWith("/p/"))
+      res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
+      );
+    if (!localHost(req))
+      return res.status(421).json({ error: "host is not allowed" });
+    if (
+      req.method !== "GET" &&
+      req.path.startsWith("/p/") &&
+      !req.get("origin") &&
+      req.is("application/x-www-form-urlencoded")
+    )
+      return res
+        .status(403)
+        .json({ error: "origin is required for public form mutations" });
+    if (req.method !== "GET" && !localOrigin(req))
+      return res.status(403).json({ error: "origin is not allowed" });
+    next();
+  });
+  const mutate = (fn, res) =>
+    store
+      .update(fn)
+      .then((value) => res.json(value ?? store.get()))
+      .catch((e) => res.status(e.status || 400).json({ error: e.message }));
+  const activity = (s, type, message) =>
+    s.activities.push({ id: store.id("act"), type, message, createdAt: now() });
+  const addContact = (s, b, source) => {
+    const normalized = email(b.email);
+    const existing = s.contacts.find((c) => c.email === normalized);
+    if (existing) {
+      existing.consent ||= consent(b.consent);
+      if (b.name) existing.name = text(b.name, "name", true, 120);
+      return existing;
+    }
+    const c = {
+      id: store.id("ct"),
+      name: text(b.name, "name", true, 120),
+      email: normalized,
+      company: text(b.company, "company", false, 160),
+      stage: stage(b.stage || "lead"),
+      source,
+      consent: consent(b.consent),
+      createdAt: now(),
+    };
+    s.contacts.push(c);
+    activity(s, "contact.created", `Contact ${c.email} created`);
+    return c;
+  };
+  const linkPageRegistration = (s, page, contact) => {
+    const workflow = s.workflows.find(
+      (w) => w.pageId === page.id && w.webinarId,
+    );
+    if (!workflow) return;
+    const webinar = find(s.webinars, workflow.webinarId, "webinar");
+    if (webinar.registrations.some((r) => r.contactId === contact.id)) return;
+    if (webinar.registrations.length >= webinar.capacity)
+      throw Object.assign(new Error("webinar is full"), { status: 409 });
+    webinar.registrations.push({ contactId: contact.id, attended: false });
+    activity(
+      s,
+      "webinar.registration",
+      `${contact.email} registered for ${webinar.title}`,
+    );
+  };
+  const pageSnapshot = (p) => ({
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    headline: p.headline,
+    description: p.description,
+    accent: p.accent,
+    blocks: clone(p.blocks),
+    status: p.status,
+    createdAt: p.createdAt,
+  });
+  const audienceIds = (s, audience) => {
+    const value = text(
+      audience || "all contacts",
+      "audience",
+      true,
+      160,
+    ).toLowerCase();
+    if (["all contacts", "all", "opted-in all", "opted-in"].includes(value))
+      return s.contacts.filter((c) => c.consent).map((c) => c.id);
+    if (["lead", "leads", "opted-in leads"].includes(value))
+      return s.contacts
+        .filter((c) => c.consent && c.stage === "lead")
+        .map((c) => c.id);
+    if (["qualified", "opted-in qualified"].includes(value))
+      return s.contacts
+        .filter((c) => c.consent && c.stage === "qualified")
+        .map((c) => c.id);
+    if (["customer", "customers", "opted-in customers"].includes(value))
+      return s.contacts
+        .filter((c) => c.consent && c.stage === "customer")
+        .map((c) => c.id);
+    throw new Error("audience is unsupported");
+  };
+  const pageFields = (b, existing = {}) => {
+    if (!Array.isArray(b.blocks ?? existing.blocks))
+      throw new Error("blocks must be an array");
+    return {
+      ...existing,
+      title: text(b.title ?? existing.title, "title", true, 160),
+      headline: text(b.headline ?? existing.headline, "headline", true, 240),
+      description: text(
+        b.description ?? existing.description,
+        "description",
+        true,
+        3000,
+      ),
+      accent: accent(b.accent ?? existing.accent),
+      blocks: (b.blocks ?? existing.blocks)
+        .map((x) => text(x, "block", true, 200))
+        .slice(0, 30),
+    };
+  };
+  app.get("/api/state", (_, res) => res.json(store.get()));
+  app.post("/api/contacts", (req, res) =>
+    mutate((s) => addContact(s, req.body || {}, "local"), res),
+  );
+  app.patch("/api/contacts/:id", (req, res) =>
+    mutate((s) => {
+      const c = find(s.contacts, req.params.id, "contact");
+      if (req.body.name !== undefined)
+        c.name = text(req.body.name, "name", true, 120);
+      if (req.body.email !== undefined) {
+        const e = email(req.body.email);
+        const duplicate = s.contacts.find(
+          (x) => x.id !== c.id && x.email === e,
+        );
+        if (duplicate)
+          throw new Error("a contact with this email already exists");
+        c.email = e;
+      }
+      if (req.body.stage !== undefined) c.stage = stage(req.body.stage);
+      if (req.body.company !== undefined)
+        c.company = text(req.body.company, "company", false, 160);
+      if (req.body.consent !== undefined) c.consent = consent(req.body.consent);
+      activity(s, "contact.updated", `Contact ${c.email} updated`);
+      return c;
+    }, res),
+  );
+  app.post("/api/pages", (req, res) =>
+    mutate((s) => {
+      const fields = pageFields(req.body || {});
+      const p = {
+        id: store.id("pg"),
+        ...fields,
+        slug: slug(fields.title, store),
+        status: "draft",
+        createdAt: now(),
+      };
+      s.pages.push(p);
+      activity(s, "page.created", `Draft page ${p.title} created`);
+      return p;
+    }, res),
+  );
+  app.patch("/api/pages/:id", (req, res) =>
+    mutate((s) => {
+      const p = find(s.pages, req.params.id, "page");
+      Object.assign(p, pageFields(req.body || {}, p));
+      activity(s, "page.updated", `Draft page ${p.title} updated`);
+      return p;
+    }, res),
+  );
+  app.post("/api/pages/:id/request-publish", (req, res) =>
+    mutate((s) => {
+      const p = find(s.pages, req.params.id, "page");
+      const snapshot = JSON.stringify(pageSnapshot(p));
+      const existing = s.approvals.find(
+        (a) =>
+          a.kind === "publish_page" &&
+          a.targetId === p.id &&
+          a.status === "pending",
+      );
+      if (existing && existing.snapshot === snapshot) return existing;
+      if (existing) existing.status = "superseded";
+      const workflow = s.workflows.find((w) => w.pageId === p.id);
+      const a = {
+        id: store.id("ap"),
+        kind: "publish_page",
+        targetId: p.id,
+        title: `Publish ${p.title}`,
+        summary: p.headline,
+        snapshot,
+        status: "pending",
+        ...(workflow ? { workflowId: workflow.id } : {}),
+        createdAt: now(),
+      };
+      s.approvals.push(a);
+      activity(
+        s,
+        "approval.requested",
+        `Publish approval requested for ${p.title}`,
+      );
+      return a;
+    }, res),
+  );
+  app.get("/p/:slug", (req, res) => {
+    if (!localOrigin(req))
+      return res.status(403).json({ error: "origin is not allowed" });
+    const p = store
+      .get()
+      .pages.find(
+        (x) =>
+          x.slug === req.params.slug &&
+          x.status === "published" &&
+          x._published,
+      );
+    if (!p) return res.status(404).json({ error: "page not found" });
+    res.type("html").send(renderPublicPage(p));
+  });
+  app.post("/p/:slug/register", (req, res) =>
+    store
+      .update((s) => {
+        const p = s.pages.find(
+          (x) =>
+            x.slug === req.params.slug &&
+            x.status === "published" &&
+            x._published,
+        );
+        if (!p)
+          throw Object.assign(new Error("page not found"), { status: 404 });
+        const contact = addContact(s, req.body || {}, `page:${p.slug}`);
+        linkPageRegistration(s, p, contact);
+        return contact;
+      })
+      .then((contact) => {
+        if (req.is("application/x-www-form-urlencoded"))
+          return res
+            .type("html")
+            .send(
+              '<!doctype html><meta name="viewport" content="width=device-width"><style>body{font:18px system-ui;background:#10151b;color:#eef7f5;text-align:center;padding:15vh 8vw}div{max-width:560px;margin:auto;padding:48px;border-radius:20px;background:#182129}h1{color:#76e4c2}</style><div><h1>You are registered</h1><p>Thanks — your registration was saved locally.</p></div>',
+            );
+        return res.json(contact);
+      })
+      .catch((e) => res.status(e.status || 400).json({ error: e.message })),
+  );
+  app.post("/api/campaigns", (req, res) =>
+    mutate((s) => {
+      const b = req.body || {};
+      const c = {
+        id: store.id("ca"),
+        name: text(b.name, "name", true, 160),
+        subject: text(b.subject, "subject", true, 240),
+        body: text(b.body, "body", true, 10000),
+        audience: text(b.audience || "all contacts", "audience", true, 160),
+        scheduledAt: b.scheduledAt ? iso(b.scheduledAt, "scheduledAt") : "",
+        status: "draft",
+        createdAt: now(),
+      };
+      audienceIds(s, c.audience);
+      s.campaigns.push(c);
+      activity(s, "campaign.created", `Draft campaign ${c.name} created`);
+      return c;
+    }, res),
+  );
+  app.post("/api/campaigns/:id/request-schedule", (req, res) =>
+    mutate((s) => {
+      const c = find(s.campaigns, req.params.id, "campaign");
+      const snapshot = JSON.stringify({ ...c });
+      const ids = audienceIds(s, c.audience);
+      const existing = s.approvals.find(
+        (a) =>
+          a.kind === "schedule_campaign" &&
+          a.targetId === c.id &&
+          a.status === "pending",
+      );
+      if (
+        existing &&
+        existing.snapshot === snapshot &&
+        JSON.stringify(existing.audienceIds) === JSON.stringify(ids)
+      )
+        return existing;
+      if (existing) existing.status = "superseded";
+      const workflow = s.workflows.find((w) => w.campaignId === c.id);
+      const a = {
+        id: store.id("ap"),
+        kind: "schedule_campaign",
+        targetId: c.id,
+        title: `Schedule ${c.name}`,
+        summary: c.subject,
+        audienceIds: ids,
+        snapshot,
+        status: "pending",
+        ...(workflow ? { workflowId: workflow.id } : {}),
+        createdAt: now(),
+      };
+      s.approvals.push(a);
+      activity(
+        s,
+        "approval.requested",
+        `Schedule approval requested for ${c.name}`,
+      );
+      return a;
+    }, res),
+  );
+  const webinarFields = (b, existing = {}, guided = false) => ({
+    ...existing,
+    title: text(b.title ?? existing.title, "title", true, 160),
+    description: text(
+      b.description ?? existing.description,
+      "description",
+      true,
+      3000,
+    ),
+    startsAt:
+      guided && (b.startsAt ?? existing.startsAt) === ""
+        ? ""
+        : iso(b.startsAt ?? existing.startsAt, "startsAt"),
+    capacity: integer(b.capacity ?? existing.capacity, "capacity", 1, 100000),
+    joinUrl: url(b.joinUrl ?? existing.joinUrl),
+  });
+  app.post("/api/webinars", (req, res) =>
+    mutate((s) => {
+      const w = {
+        id: store.id("wb"),
+        ...webinarFields(req.body || {}),
+        status: "draft",
+        registrations: [],
+        createdAt: now(),
+      };
+      s.webinars.push(w);
+      activity(s, "webinar.created", `Draft webinar ${w.title} created`);
+      return w;
+    }, res),
+  );
+  app.patch("/api/webinars/:id", (req, res) =>
+    mutate((s) => {
+      const w = find(s.webinars, req.params.id, "webinar");
+      const fields = webinarFields(req.body || {}, w, true);
+      if (fields.capacity < w.registrations.length)
+        throw new Error("capacity cannot be below registrations");
+      Object.assign(w, fields);
+      for (const workflow of s.workflows.filter(
+        (item) => item.webinarId === w.id,
+      )) {
+        const step = workflow.steps.find((item) => item.agent === "Events");
+        if (step) step.status = w.startsAt ? "completed" : "draft";
+      }
+      activity(s, "webinar.updated", `Draft webinar ${w.title} updated`);
+      return w;
+    }, res),
+  );
+  app.post("/api/webinars/:id/register", (req, res) =>
+    mutate((s) => {
+      const w = find(s.webinars, req.params.id, "webinar");
+      const c = find(s.contacts, req.body.contactId, "contact");
+      if (w.registrations.some((r) => r.contactId === c.id)) return w;
+      if (w.registrations.length >= w.capacity)
+        throw Object.assign(new Error("webinar is full"), { status: 409 });
+      w.registrations.push({ contactId: c.id, attended: false });
+      activity(
+        s,
+        "webinar.registration",
+        `${c.email} registered for ${w.title}`,
+      );
+      return w;
+    }, res),
+  );
+  app.post("/api/webinars/:id/attendance", (req, res) =>
+    mutate((s) => {
+      const w = find(s.webinars, req.params.id, "webinar");
+      const r = w.registrations.find((x) => x.contactId === req.body.contactId);
+      if (!r)
+        throw Object.assign(new Error("registration not found"), {
+          status: 404,
+        });
+      if (typeof req.body.attended !== "boolean")
+        throw new Error("attended must be boolean");
+      r.attended = req.body.attended;
+      activity(
+        s,
+        "webinar.attendance",
+        `Manual attendance updated for ${req.body.contactId}`,
+      );
+      return w;
+    }, res),
+  );
+  app.post("/api/subscriptions", (req, res) =>
+    mutate((s) => {
+      find(s.contacts, req.body.contactId, "contact");
+      find(s.plans, req.body.planId, "plan");
+      const sub = {
+        id: store.id("sub"),
+        contactId: req.body.contactId,
+        planId: req.body.planId,
+        status: "active",
+        usage: 0,
+        _usageEvents: Object.create(null),
+        createdAt: now(),
+        sandbox: true,
+      };
+      s.subscriptions.push(sub);
+      activity(s, "subscription.created", "Sandbox subscription created");
+      return sub;
+    }, res),
+  );
+  app.post("/api/subscriptions/:id/usage", (req, res) =>
+    mutate((s) => {
+      const sub = find(s.subscriptions, req.params.id, "subscription");
+      if (sub.status === "canceled")
+        throw Object.assign(new Error("subscription is canceled"), {
+          status: 409,
+        });
+      const quantity = integer(req.body.quantity, "quantity");
+      const eventId = text(req.body.eventId, "eventId", true, 160);
+      sub._usageEvents ||= Object.create(null);
+      if (Object.prototype.hasOwnProperty.call(sub._usageEvents, eventId)) {
+        if (sub._usageEvents[eventId] !== quantity)
+          throw Object.assign(
+            new Error("eventId was already recorded with a different quantity"),
+            { status: 409 },
+          );
+        return sub;
+      }
+      Object.defineProperty(sub._usageEvents, eventId, {
+        value: quantity,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+      sub.usage += quantity;
+      activity(s, "subscription.usage", `Recorded ${quantity} usage units`);
+      return sub;
+    }, res),
+  );
+  app.patch("/api/subscriptions/:id", (req, res) =>
+    mutate((s) => {
+      const sub = find(s.subscriptions, req.params.id, "subscription");
+      if (req.body.status !== "canceled")
+        throw new Error("only cancellation is supported");
+      sub.status = "canceled";
+      activity(s, "subscription.canceled", "Sandbox subscription canceled");
+      return sub;
+    }, res),
+  );
+  app.post("/api/workflows", (req, res) =>
+    mutate((s) => {
+      const prompt = text(req.body?.prompt, "prompt", true, 2000);
+      const p = req.body?.plan;
+      if (p)
+        CONTENT_FIELDS.forEach((k) =>
+          text(
+            p[k],
+            k,
+            true,
+            {
+              title: 160,
+              headline: 240,
+              description: 3000,
+              emailSubject: 240,
+              emailBody: 10000,
+            }[k],
+          ),
+        );
+      const title = p?.title || "Guided local event";
+      const page = {
+        id: store.id("pg"),
+        title,
+        slug: slug(title, store),
+        headline: p?.headline || title,
+        description: p?.description || `A local draft for: ${prompt}`,
+        accent: "#76e4c2",
+        blocks: ["hero", "details", "registration"],
+        status: "draft",
+        createdAt: now(),
+      };
+      const campaign = {
+        id: store.id("ca"),
+        name: `${title} invite`,
+        subject: p?.emailSubject || title,
+        body: p?.emailBody || "A local campaign draft for review.",
+        audience: "leads",
+        scheduledAt: "",
+        status: "draft",
+        createdAt: now(),
+      };
+      const webinar = {
+        id: store.id("wb"),
+        title,
+        description: `Guided draft for: ${prompt}`,
+        startsAt: "",
+        capacity: 50,
+        joinUrl: "",
+        status: "draft",
+        registrations: [],
+        createdAt: now(),
+        draftNote: "Date intentionally unset until configured.",
+      };
+      s.pages.push(page);
+      s.campaigns.push(campaign);
+      s.webinars.push(webinar);
+      const w = {
+        id: store.id("wf"),
+        prompt,
+        title,
+        status: "awaiting_approval",
+        executionMode: p
+          ? "reviewed_content_local_workflow"
+          : "deterministic_local_template",
+        steps: [
+          {
+            id: store.id("step"),
+            label: "Coordinate local plan",
+            agent: "Coordinator",
+            status: "completed",
+          },
+          {
+            id: store.id("step"),
+            label: "Review website",
+            agent: "Website",
+            status: "awaiting_approval",
+          },
+          {
+            id: store.id("step"),
+            label: "Review growth campaign",
+            agent: "Growth",
+            status: "awaiting_approval",
+          },
+          {
+            id: store.id("step"),
+            label: "Configure event draft",
+            agent: "Events",
+            status: "draft",
+          },
+          {
+            id: store.id("step"),
+            label: "Track contacts",
+            agent: "CRM",
+            status: "ready",
+          },
+        ],
+        createdAt: now(),
+        pageId: page.id,
+        campaignId: campaign.id,
+        webinarId: webinar.id,
+      };
+      s.workflows.push(w);
+      for (const [kind, target, label] of [
+        ["publish_page", page, "page"],
+        ["schedule_campaign", campaign, "campaign"],
+      ])
+        s.approvals.push({
+          id: store.id("ap"),
+          kind,
+          targetId: target.id,
+          title: `Review ${label}: ${title}`,
+          summary: target.headline || target.subject,
+          audienceIds:
+            kind === "schedule_campaign"
+              ? audienceIds(s, campaign.audience)
+              : [],
+          snapshot:
+            kind === "publish_page"
+              ? JSON.stringify(pageSnapshot(target))
+              : JSON.stringify({ ...target }),
+          status: "pending",
+          workflowId: w.id,
+          createdAt: now(),
+        });
+      activity(
+        s,
+        "workflow.created",
+        `Deterministic workflow ${title} created with linked drafts`,
+      );
+      return w;
+    }, res),
+  );
+  app.post("/api/approvals/:id/decide", (req, res) =>
+    mutate((s) => {
+      const a = find(s.approvals, req.params.id, "approval");
+      if (a.status !== "pending")
+        throw Object.assign(new Error("approval is no longer pending"), {
+          status: 409,
+        });
+      if (!["approve", "reject"].includes(req.body.decision))
+        throw new Error("decision must be approve or reject");
+      const target = find(
+        a.kind === "publish_page" ? s.pages : s.campaigns,
+        a.targetId,
+      );
+      const currentSnapshot =
+        a.kind === "publish_page"
+          ? JSON.stringify(pageSnapshot(target))
+          : JSON.stringify({ ...target });
+      const stale = currentSnapshot !== a.snapshot;
+      if (req.body.decision === "approve" && stale)
+        throw Object.assign(new Error("approval snapshot is stale"), {
+          status: 409,
+        });
+      if (
+        req.body.decision === "approve" &&
+        a.kind === "schedule_campaign" &&
+        JSON.stringify(a.audienceIds) !==
+          JSON.stringify(audienceIds(s, target.audience))
+      ) {
+        throw Object.assign(
+          new Error(
+            "Audience or consent changed. Request a fresh campaign approval.",
+          ),
+          { status: 409 },
+        );
+      }
+      a.status = req.body.decision === "approve" ? "approved" : "rejected";
+      if (a.kind === "publish_page") {
+        if (a.status === "approved") {
+          target.status = "published";
+          target._published = pageSnapshot(target);
+        }
+      } else if (a.status === "approved") target.status = "scheduled_local";
+      for (const w of s.workflows)
+        if (w.pageId === target.id || w.campaignId === target.id) {
+          const related = ["publish_page", "schedule_campaign"]
+            .map((kind) =>
+              s.approvals
+                .filter(
+                  (x) =>
+                    x.workflowId === w.id &&
+                    x.kind === kind &&
+                    x.status !== "superseded",
+                )
+                .at(-1),
+            )
+            .filter(Boolean);
+          w.status = related.some((x) => x.status === "rejected")
+            ? "rejected"
+            : related.every((x) => x.status === "approved")
+              ? "drafts_ready"
+              : "awaiting_approval";
+          for (const step of w.steps)
+            if (step.agent === "Website" && a.kind === "publish_page")
+              step.status = a.status === "approved" ? "completed" : "rejected";
+            else if (step.agent === "Growth" && a.kind === "schedule_campaign")
+              step.status = a.status === "approved" ? "completed" : "rejected";
+        }
+      activity(s, "approval.decided", `${a.title}: ${a.status}`);
+      return a;
+    }, res),
+  );
+  app.get("/api/ai/status", async (_, res) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    try {
+      const r = await ollamaFetch("http://127.0.0.1:11434/api/tags", {
+        signal: controller.signal,
+      });
+      if (!r.ok) throw new Error("status failed");
+      const data = await r.json();
+      res.json({
+        available: true,
+        models: Array.isArray(data.models)
+          ? data.models.map((m) => m.name).filter((x) => typeof x === "string")
+          : [],
+      });
+    } catch {
+      res.json({
+        available: false,
+        models: [],
+        error: "Ollama unavailable locally",
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  app.post("/api/ai/plan", async (req, res) => {
+    try {
+      const prompt = text(req.body?.prompt, "prompt", true, 2000);
+      const model = text(req.body?.model, "model", true, 120);
+      if (!/^[\w.:-]+(?:\/[\w.:-]+)?$/.test(model))
+        throw new Error("model is invalid");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 120000);
+      try {
+        const response = await ollamaFetch(
+          "http://127.0.0.1:11434/api/generate",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              model,
+              system:
+                "You draft concise business copy for human review. Return only the requested JSON fields. Use only facts in the user's brief. Never invent dates, times, prices, discounts, speakers, certificates, scarcity, claims, or links. If event details are missing, say details will be announced; do not fill placeholders with made-up facts. Never return tools, credentials, code or execution instructions. Do not claim any action has happened.",
+              prompt: `Create a concise event plan for: ${prompt}`,
+              stream: false,
+              format: {
+                type: "object",
+                properties: Object.fromEntries(
+                  CONTENT_FIELDS.map((k) => [k, { type: "string" }]),
+                ),
+                required: CONTENT_FIELDS,
+              },
+              options: { num_predict: 1000, num_ctx: 4096, temperature: 0.3 },
+            }),
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok) throw new Error("Ollama request failed");
+        const body = await response.text();
+        if (body.length > 200000) throw new Error("Ollama response too large");
+        const json = JSON.parse(body);
+        const parsed =
+          typeof json.response === "string"
+            ? JSON.parse(json.response)
+            : json.response;
+        const out = {};
+        CONTENT_FIELDS.forEach((k) => {
+          out[k] = text(
+            parsed?.[k],
+            k,
+            true,
+            {
+              title: 160,
+              headline: 240,
+              description: 3000,
+              emailSubject: 240,
+              emailBody: 10000,
+            }[k],
+          );
+        });
+        return res.json({ ...out, source: "ollama", model });
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      return res
+        .status(503)
+        .json({ error: "Ollama unavailable or returned invalid content" });
+    }
+  });
+  if (fs.existsSync(distDir)) app.use(express.static(distDir));
+  app.use((err, _req, res, _next) =>
+    res
+      .status(err.status || 400)
+      .json({ error: err.message || "request failed" }),
+  );
+  return app;
+}
