@@ -25,7 +25,7 @@ export function seedState() {
         name: "Ravi Shah",
         email: "ravi@example.test",
         company: "Sample Works",
-        stage: "prospect",
+        stage: "qualified",
         source: "demo",
         consent: true,
         createdAt,
@@ -148,7 +148,27 @@ export function createStore(dir) {
     async save(value = state) {
       const tmp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
       await fs.writeFile(tmp, JSON.stringify(value, null, 2));
-      await fs.rename(tmp, file);
+      try {
+        // Windows indexing/antivirus can briefly lock the destination. Retry the
+        // same atomic rename, never the business mutation and never delete live data.
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await fs.rename(tmp, file);
+            break;
+          } catch (error) {
+            if (
+              !["EPERM", "EACCES", "EBUSY"].includes(error.code) ||
+              attempt >= 7
+            )
+              throw error;
+            await new Promise((resolve) =>
+              setTimeout(resolve, 25 * 2 ** attempt),
+            );
+          }
+        }
+      } finally {
+        await fs.rm(tmp, { force: true }).catch(() => {});
+      }
     },
     async update(fn) {
       const run = queue.then(async () => {

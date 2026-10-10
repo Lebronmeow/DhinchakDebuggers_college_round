@@ -3,6 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { createStore, now } from "./store.mjs";
 import { renderPublicPage } from "./public-page.mjs";
+import { registerOrchestraRoutes } from "./orchestra/routes.mjs";
+import { createBusinessTools } from "./agent-tools.mjs";
+import { registerDeliveryRoutes } from "./delivery.mjs";
 
 const STAGES = new Set(["lead", "qualified", "customer"]);
 const CONTENT_FIELDS = [
@@ -101,6 +104,7 @@ export async function createApp({
   dataDir = path.join(process.cwd(), "data"),
   distDir = path.join(process.cwd(), "dist"),
   ollamaFetch = fetch,
+  providerFetch = fetch,
 } = {}) {
   const store = createStore(dataDir);
   await store.init();
@@ -165,8 +169,12 @@ export async function createApp({
     const workflow = s.workflows.find(
       (w) => w.pageId === page.id && w.webinarId,
     );
-    if (!workflow) return;
-    const webinar = find(s.webinars, workflow.webinarId, "webinar");
+    if (!workflow && !page.webinarId) return;
+    const webinar = find(
+      s.webinars,
+      page.webinarId || workflow.webinarId,
+      "webinar",
+    );
     if (webinar.registrations.some((r) => r.contactId === contact.id)) return;
     if (webinar.registrations.length >= webinar.capacity)
       throw Object.assign(new Error("webinar is full"), { status: 409 });
@@ -231,6 +239,7 @@ export async function createApp({
     };
   };
   app.get("/api/state", (_, res) => res.json(store.get()));
+  registerDeliveryRoutes(app, { store, providerFetch });
   app.post("/api/contacts", (req, res) =>
     mutate((s) => addContact(s, req.body || {}, "local"), res),
   );
@@ -266,6 +275,10 @@ export async function createApp({
         status: "draft",
         createdAt: now(),
       };
+      if (req.body.webinarId) {
+        find(s.webinars, req.body.webinarId, "webinar");
+        p.webinarId = req.body.webinarId;
+      }
       s.pages.push(p);
       activity(s, "page.created", `Draft page ${p.title} created`);
       return p;
@@ -431,7 +444,7 @@ export async function createApp({
     mutate((s) => {
       const w = {
         id: store.id("wb"),
-        ...webinarFields(req.body || {}),
+        ...webinarFields(req.body || {}, {}, true),
         status: "draft",
         registrations: [],
         createdAt: now(),
@@ -843,6 +856,11 @@ export async function createApp({
         .status(503)
         .json({ error: "Ollama unavailable or returned invalid content" });
     }
+  });
+  await registerOrchestraRoutes(app, {
+    store,
+    ollamaFetch,
+    createTools: (port) => createBusinessTools({ store, port }),
   });
   if (fs.existsSync(distDir)) app.use(express.static(distDir));
   app.use((err, _req, res, _next) =>

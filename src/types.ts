@@ -70,7 +70,7 @@ export interface Subscription {
 }
 export interface Approval {
   id: string;
-  kind: "publish_page" | "schedule_campaign";
+  kind: "publish_page" | "schedule_campaign" | "send_campaign";
   targetId: string;
   title: string;
   summary: string;

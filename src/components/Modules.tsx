@@ -1165,7 +1165,11 @@ function Approvals({ p }: { p: ModuleProps }) {
   };
   return (
     <Shell eyebrow="Review queue" title="Approvals">
-      <div className="nx-notice">Local decisions only; no external sends.</div>
+      <div className="nx-notice">
+        Review the exact operation. Page publication executes locally. Send
+        approvals execute real email delivery when configured; local scheduling
+        alone does not send.
+      </div>
       <div className="nx-cards">
         {p.state.approvals.map((a) => (
           <article className="nx-panel nx-approval" key={a.id}>
@@ -1178,7 +1182,8 @@ function Approvals({ p }: { p: ModuleProps }) {
               <h3>{a.title}</h3>
               <p>{a.summary}</p>
               <ApprovalPreview approval={a} state={p.state} />
-              {a.kind === "schedule_campaign" && (
+              {(a.kind === "schedule_campaign" ||
+                a.kind === "send_campaign") && (
                 <small>Eligible opted-in contacts: {eligible(a)}</small>
               )}
             </div>
@@ -1268,9 +1273,22 @@ function ApprovalPreview({
             {date(field("scheduledAt", campaign?.scheduledAt))}
           </small>
           <p>
-            No external email will be sent. This records an approved local
-            schedule only.
+            {approval.kind === "send_campaign"
+              ? "Approving sends this exact email to the captured opted-in recipients through Resend. This action cannot be undone. Provider acceptance does not guarantee inbox delivery."
+              : "No external email will be sent. This records an approved local schedule only."}
           </p>
+          {approval.kind === "send_campaign" && (
+            <p>
+              <strong>Recipients:</strong>{" "}
+              {(
+                (approval as Approval & { recipientEmails?: string[] })
+                  .recipientEmails || []
+              ).join(", ")}
+              <br />
+              <strong>From:</strong>{" "}
+              {(approval as Approval & { sender?: string }).sender}
+            </p>
+          )}
         </div>
       )}
     </details>
@@ -1316,10 +1334,11 @@ function Analytics({ p }: { p: ModuleProps }) {
       <div className="nx-panel nx-analytics-note">
         <h3>Measurement, not guesswork</h3>
         <p>
-          Counts use stored records, including fictional starter data. Campaign
-          sends and collected revenue are zero: no delivery or payment provider
-          is connected. Sandbox plan totals exclude overages and are not real
-          MRR.
+          Counts use stored records, including fictional starter data.{" "}
+          {p.state.campaigns.filter((c) => c.status === "sent").length}{" "}
+          campaigns have verified email-provider acceptance; inbox delivery is
+          not guaranteed. Payments remain sandbox-only. Plan totals exclude
+          overages and are not real MRR.
         </p>
         <p>
           {p.state.workflows.length} workflows ·{" "}
@@ -1333,6 +1352,12 @@ function Analytics({ p }: { p: ModuleProps }) {
   );
 }
 function Settings({ p }: { p: ModuleProps }) {
+  const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null);
+  useEffect(() => {
+    api<{ email: { configured: boolean } }>("/connections")
+      .then((c) => setEmailConfigured(c.email.configured))
+      .catch(() => setEmailConfigured(null));
+  }, []);
   const [ai, setAi] = useState<{
     available?: boolean;
     models?: string[];
@@ -1348,10 +1373,20 @@ function Settings({ p }: { p: ModuleProps }) {
             <div className="nx-integration" key={i.id}>
               <div>
                 <strong>{i.name}</strong>
-                <p>{i.description}</p>
+                <p>
+                  {i.id === "email"
+                    ? "Resend connector: exact recipient/content approval, idempotency key, verified provider receipts."
+                    : i.description}
+                </p>
               </div>
               <span className="nx-badge nx-muted">
-                {i.status || "unconfigured"}
+                {i.id === "email"
+                  ? emailConfigured === null
+                    ? "checking"
+                    : emailConfigured
+                      ? "configured"
+                      : "needs setup"
+                  : i.status || "unconfigured"}
               </span>
             </div>
           ))}
@@ -1359,16 +1394,18 @@ function Settings({ p }: { p: ModuleProps }) {
         <div className="nx-panel">
           <div className="nx-panel-title">Connection guide</div>
           <p className="nx-muted-text">
-            No paid service is required for this local version. These are setup
-            candidates, not connected integrations; current free/trial terms
-            must be checked with each provider.
+            Ollama runs locally without an account. For real email, create a
+            Resend account and configure a verified sender; put RESEND_API_KEY
+            and NEXUS_EMAIL_FROM in the local .env file, then restart. Check
+            current free-tier limits before use. Video and real payments remain
+            future integrations.
           </p>
           {[
             [
               "Ollama — local AI, no account required",
               "https://ollama.com/download",
             ],
-            ["Resend — future email delivery", "https://resend.com"],
+            ["Resend — connect email delivery", "https://resend.com"],
             ["LiveKit — future live webinar integration", "https://livekit.io"],
             [
               "Stripe — future payment test mode",

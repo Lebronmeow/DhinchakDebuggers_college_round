@@ -1,390 +1,632 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import type { Workflow } from "../types";
+import type { AgentRole, AgentRun } from "../orchestra-types";
 import "./pixel-office.css";
 
 type PixelOfficeProps = {
   workflows: Workflow[];
+  runs?: AgentRun[];
   onAgentSelect?: (agent: string) => void;
   compact?: boolean;
 };
-
 type Agent = {
-  name: string;
+  name: AgentRole;
   role: string;
   x: number;
   y: number;
-  color: string;
-  accent: string;
+  shirt: string;
+  skin: string;
+  hair: string;
+  room: string;
 };
-
 const AGENTS: Agent[] = [
   {
-    name: "Growth",
-    role: "audience & campaigns",
-    x: 15,
-    y: 28,
-    color: "#d07b58",
-    accent: "#f2bf76",
+    name: "Coordinator",
+    role: "CEO / orchestration",
+    x: 195,
+    y: 125,
+    shirt: "#ee805e",
+    skin: "#dba17c",
+    hair: "#35252e",
+    room: "ceo",
   },
   {
     name: "Website",
     role: "pages & publishing",
-    x: 39,
-    y: 27,
-    color: "#668b77",
-    accent: "#b8d49d",
+    x: 195,
+    y: 365,
+    shirt: "#50a0ad",
+    skin: "#dda17d",
+    hair: "#704431",
+    room: "website",
   },
   {
     name: "CRM",
     role: "contacts & journeys",
-    x: 64,
-    y: 28,
-    color: "#7188ae",
-    accent: "#b9c9ed",
+    x: 690,
+    y: 365,
+    shirt: "#a37bd0",
+    skin: "#b97863",
+    hair: "#372732",
+    room: "crm",
+  },
+  {
+    name: "Growth",
+    role: "audience & campaigns",
+    x: 1185,
+    y: 365,
+    shirt: "#e59b51",
+    skin: "#dda47d",
+    hair: "#553326",
+    room: "growth",
   },
   {
     name: "Events",
     role: "webinars & attendance",
-    x: 22,
-    y: 69,
-    color: "#a56e9b",
-    accent: "#e7afd5",
+    x: 195,
+    y: 610,
+    shirt: "#55b79d",
+    skin: "#cb876c",
+    hair: "#302829",
+    room: "events",
   },
   {
     name: "Billing",
     role: "plans & sandbox usage",
-    x: 51,
-    y: 70,
-    color: "#bb8752",
-    accent: "#f0ce8d",
+    x: 690,
+    y: 610,
+    shirt: "#e27b62",
+    skin: "#d59a75",
+    hair: "#62402b",
+    room: "billing",
   },
   {
-    name: "Coordinator",
-    role: "workflow approvals",
-    x: 79,
-    y: 68,
-    color: "#637e75",
-    accent: "#b3d2c4",
+    name: "Review",
+    role: "quality & records",
+    x: 1185,
+    y: 610,
+    shirt: "#7898d7",
+    skin: "#bc806b",
+    hair: "#2f2d3c",
+    room: "review",
   },
 ];
+const rooms = AGENTS.slice(1);
+const truncate = (text: string, max = 55) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
 
-const statusText = (agent: Agent, workflows: Workflow[]) => {
-  const steps = workflows
-    .flatMap((workflow) => workflow.steps || [])
-    .filter((step) =>
-      step.agent.toLowerCase().includes(agent.name.toLowerCase()),
-    );
-  if (!steps.length) return "Idle";
-  if (
-    steps.some((step) =>
-      /^(awaiting_approval|pending|review)$/.test(step.status),
-    )
-  )
-    return "Awaiting approval";
-  if (steps.some((step) => step.status === "rejected"))
-    return "Needs attention";
-  return "Ready";
-};
+function Sprite({ agent, working }: { agent: Agent; working: boolean }) {
+  return (
+    <g className={working ? "sprite sprite--working" : "sprite"}>
+      <ellipse cx="0" cy="37" rx="24" ry="7" fill="#171923" opacity=".58" />
+      <rect
+        x="-14"
+        y="9"
+        width="28"
+        height="27"
+        fill={agent.shirt}
+        stroke="#2d2630"
+        strokeWidth="3"
+      />
+      <rect x="-20" y="15" width="6" height="16" fill={agent.skin} />
+      <rect x="14" y="15" width="6" height="16" fill={agent.skin} />
+      <rect x="-12" y="34" width="9" height="13" fill="#282936" />
+      <rect x="3" y="34" width="9" height="13" fill="#282936" />
+      <rect
+        x="-12"
+        y="-14"
+        width="24"
+        height="24"
+        fill={agent.skin}
+        stroke="#2d2630"
+        strokeWidth="3"
+      />
+      <path d="M-15-14h30v9h-5v6h-7v-7h-8v9h-10z" fill={agent.hair} />
+      <rect x="-7" y="-1" width="4" height="4" fill="#302630" />
+      <rect x="6" y="-1" width="4" height="4" fill="#302630" />
+      <rect x="-2" y="6" width="8" height="2" fill="#9a5e58" />
+      <rect x="-8" y="15" width="16" height="4" fill="#ffd58b" />
+      {working && <rect x="22" y="-20" width="6" height="6" fill="#f5cf65" />}
+    </g>
+  );
+}
+function Desk({ x, y }: { x: number; y: number }) {
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width="150"
+        height="47"
+        fill="#986044"
+        stroke="#35282f"
+        strokeWidth="5"
+      />
+      <rect
+        x={x + 51}
+        y={y - 36}
+        width="48"
+        height="32"
+        fill="#243f52"
+        stroke="#1a2832"
+        strokeWidth="5"
+      />
+      <rect x={x + 59} y={y - 28} width="32" height="18" fill="#89c8ba" />
+      <rect x={x + 14} y={y + 13} width="42" height="7" fill="#f0d18e" />
+      <path
+        d={`M${x + 38} ${y + 47}v14m76-14v14`}
+        stroke="#35282f"
+        strokeWidth="6"
+      />
+    </g>
+  );
+}
+function Room({
+  agent,
+  index,
+  working,
+  message,
+}: {
+  agent: Agent;
+  index: number;
+  working: boolean;
+  message?: string;
+}) {
+  const x = 20 + (index % 3) * 495,
+    y = index < 3 ? 210 : 455;
+  const tint = ["#625b4c", "#4f5d63", "#5b526d"][index % 3];
+  return (
+    <g>
+      <rect x={x} y={y} width="470" height="220" fill={tint} />
+      <path
+        d={`M${x} ${y}h470v220H${x}z`}
+        fill="none"
+        stroke="#332936"
+        strokeWidth="8"
+      />
+      <path d={`M${x} ${y + 9}h470`} stroke="#e5bd75" strokeWidth="9" />
+      <rect
+        x={x + 20}
+        y={y + 18}
+        width="180"
+        height="28"
+        fill="#efd18f"
+        stroke="#47333a"
+        strokeWidth="4"
+      />
+      <text x={x + 33} y={y + 38} className="room-label">
+        {agent.name.toUpperCase()}
+      </text>
+      {/* noticeboard, bookshelf, window and clock */}
+      <rect
+        x={x + 275}
+        y={y + 18}
+        width="72"
+        height="52"
+        fill="#bd815d"
+        stroke="#392b32"
+        strokeWidth="4"
+      />
+      <rect x={x + 285} y={y + 29} width="16" height="13" fill="#e9c57e" />
+      <rect x={x + 307} y={y + 29} width="29" height="13" fill="#8bb6ab" />
+      <rect
+        x={x + 360}
+        y={y + 18}
+        width="68"
+        height="48"
+        fill="#8caeb0"
+        stroke="#3e4a51"
+        strokeWidth="4"
+      />
+      <path
+        d={`M${x + 394} ${y + 18}v48m-34-24h68`}
+        stroke="#dce2cd"
+        strokeWidth="3"
+      />
+      <rect
+        x={x + 432}
+        y={y + 22}
+        width="22"
+        height="22"
+        fill="#eee3bd"
+        stroke="#654849"
+        strokeWidth="3"
+      />
+      <path d={`M${x + 443} ${y + 26}v7h6`} stroke="#67474b" strokeWidth="2" />
+      <rect
+        x={x + 18}
+        y={y + 144}
+        width="58"
+        height="48"
+        fill="#704d45"
+        stroke="#372c33"
+        strokeWidth="4"
+      />
+      <path
+        d={`M${x + 29} ${y + 154}h36m-36 12h36m-36 12h36`}
+        stroke="#e0b26f"
+        strokeWidth="5"
+      />
+      <path
+        d={`M${x + 90} ${y + 181}q-23-42-46 0m27-15q-4-27-20-35m17 34q22-27 34-22`}
+        fill="none"
+        stroke="#6ca26e"
+        strokeWidth="7"
+      />
+      <Desk x={x + 100} y={y + 126} />
+      <Desk x={x + 298} y={y + 126} />
+      <g transform={`translate(${x + 175} ${y + 154})`}>
+        <Sprite agent={agent} working={working} />
+      </g>
+      {message && (
+        <g>
+          <rect
+            x={x + 125}
+            y={y + 65}
+            width="240"
+            height="32"
+            fill="#fff0c8"
+            stroke="#49353a"
+            strokeWidth="3"
+          />
+          <path
+            d={`M${x + 165} ${y + 97}l-10 12 28-12`}
+            fill="#fff0c8"
+            stroke="#49353a"
+            strokeWidth="3"
+          />
+          <text x={x + 138} y={y + 86} className="bubble-text">
+            {truncate(message)}
+          </text>
+        </g>
+      )}
+    </g>
+  );
+}
 
 export default function PixelOffice({
   workflows,
+  runs = [],
   onAgentSelect,
   compact = false,
 }: PixelOfficeProps) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const statuses = useMemo(
+  const [selected, setSelected] = useState<AgentRole | null>(null);
+  const newest = useMemo(
     () =>
-      Object.fromEntries(
-        AGENTS.map((agent) => [agent.name, statusText(agent, workflows)]),
-      ),
-    [workflows],
+      [...runs].sort(
+        (a, b) =>
+          +new Date(b.updatedAt || b.createdAt) -
+          +new Date(a.updatedAt || a.createdAt),
+      )[0],
+    [runs],
   );
-  const selectedAgent = AGENTS.find((agent) => agent.name === selected);
-
-  const selectAgent = (name: string) => {
-    setSelected(name);
-    onAgentSelect?.(name);
+  const active =
+    newest &&
+    ["queued", "planning", "running", "awaiting_approval"].includes(
+      newest.status,
+    )
+      ? newest
+      : undefined;
+  const state = (agent: Agent) => {
+    const tasks = active?.tasks.filter((t) => t.agent === agent.name) ?? [];
+    if (
+      tasks.some((t) => t.status === "awaiting_approval") ||
+      (active?.status === "awaiting_approval" &&
+        tasks.some((t) => !["completed", "done"].includes(t.status)))
+    )
+      return "Awaiting approval";
+    if (
+      tasks.some((t) => ["running", "planning"].includes(t.status)) ||
+      (agent.name === "Coordinator" && active?.status === "planning")
+    )
+      return "Working";
+    if (tasks.some((t) => ["queued", "pending"].includes(t.status)))
+      return "Queued";
+    const old = workflows
+      .flatMap((w) => w.steps || [])
+      .filter((s) => s.agent.toLowerCase().includes(agent.name.toLowerCase()));
+    if (old.some((s) => /awaiting_approval|pending/i.test(s.status)))
+      return "Awaiting approval";
+    return old.length || newest?.status === "completed" ? "Ready" : "Idle";
   };
-
+  const message = (agent: Agent) =>
+    [...(active?.messages ?? []), ...(newest?.messages ?? [])]
+      .reverse()
+      .find((m) => m.from === agent.name)?.text;
+  const selectedAgent = AGENTS.find((a) => a.name === selected);
+  const select = (a: AgentRole) => {
+    setSelected(a);
+    onAgentSelect?.(a);
+  };
   return (
     <section
       className={`pixel-office ${compact ? "pixel-office--compact" : ""}`}
       aria-label="Nexus pixel office"
     >
-      <div className="pixel-office__header">
+      <header className="pixel-office__header">
         <div>
-          <p className="pixel-office__eyebrow">NEXUS HQ · LOCAL WORKSPACE</p>
+          <p className="pixel-office__eyebrow">NEXUS HQ · LIVE ORCHESTRA</p>
           <h2>The team behind your workflows</h2>
         </div>
-        <div className="pixel-office__legend" aria-label="Office status legend">
+        <div className="pixel-office__legend">
+          <span>
+            <i className="status-dot status-dot--working" />
+            Working
+          </span>
           <span>
             <i className="status-dot status-dot--ready" />
             Ready
           </span>
           <span>
             <i className="status-dot status-dot--approval" />
-            Awaiting approval
+            Approval
           </span>
         </div>
-      </div>
-
+      </header>
       <div className="pixel-office__frame">
-        <svg
-          className="pixel-office__scene"
-          viewBox="0 0 960 480"
-          role="img"
-          aria-label="Top-down illustrated office with desks, plants, windows and meeting area"
-        >
-          <defs>
-            <pattern
-              id="tile"
-              width="48"
-              height="48"
-              patternUnits="userSpaceOnUse"
-            >
-              <rect width="48" height="48" fill="#f5eddf" />
-              <path
-                d="M48 0H0V48"
-                fill="none"
-                stroke="#e5dac7"
-                strokeWidth="2"
-              />
-            </pattern>
-            <pattern
-              id="rug"
-              width="18"
-              height="18"
-              patternUnits="userSpaceOnUse"
-            >
-              <rect width="18" height="18" fill="#dce5d5" />
-              <path d="M0 9h18M9 0v18" stroke="#c1d1c1" strokeWidth="2" />
-            </pattern>
-            <filter id="softGlow">
-              <feGaussianBlur stdDeviation="3" />
-            </filter>
-          </defs>
-          <rect
-            x="8"
-            y="8"
-            width="944"
-            height="464"
-            rx="20"
-            fill="url(#tile)"
-            stroke="#c9bca9"
-            strokeWidth="5"
-          />
-          <path
-            d="M28 112H932M28 352H932M314 28V452M680 28V452"
-            stroke="#d8cbb8"
-            strokeWidth="3"
-            strokeDasharray="5 9"
-          />
-          {/* windows and warm light */}
-          <g className="office-window">
-            <rect
-              x="354"
-              y="18"
-              width="270"
-              height="39"
-              rx="8"
-              fill="#a9c4c0"
-              stroke="#758f88"
-              strokeWidth="4"
-            />
-            <path
-              d="M444 18v39M534 18v39M354 37h270"
-              stroke="#d9eee1"
-              strokeWidth="3"
-            />
-            <path
-              d="M367 27h70M547 27h70"
-              stroke="#f8dba3"
-              strokeWidth="4"
-              opacity=".8"
-            />
-          </g>
-          <g opacity=".28" filter="url(#softGlow)">
-            <circle cx="488" cy="80" r="35" fill="#f4c977" />
-            <circle cx="480" cy="397" r="30" fill="#f4c977" />
-          </g>
-          {/* partitions */}
-          <g fill="#b7c7b3" stroke="#789080" strokeWidth="4">
-            <path d="M28 190h270v12H28zM28 284h270v12H28zM660 190h272v12H660zM660 284h272v12H660z" />
-            <path d="M298 155h12v167h-12zM650 155h12v167h-12z" />
-          </g>
-          {/* rug and meeting table */}
-          <ellipse
-            cx="480"
-            cy="252"
-            rx="145"
-            ry="72"
-            fill="url(#rug)"
-            stroke="#b2c2b0"
-            strokeWidth="4"
-          />
-          <ellipse
-            cx="480"
-            cy="252"
-            rx="90"
-            ry="36"
-            fill="#e7d8c4"
-            stroke="#c5ad92"
-            strokeWidth="5"
-          />
-          <g fill="#8c7b69">
-            <circle cx="405" cy="252" r="10" />
-            <circle cx="555" cy="252" r="10" />
-            <circle cx="480" cy="205" r="10" />
-            <circle cx="480" cy="299" r="10" />
-          </g>
-          {/* coffee nook */}
-          <g>
-            <rect
-              x="704"
-              y="80"
-              width="170"
-              height="72"
-              rx="10"
-              fill="#ead7bd"
-              stroke="#a98262"
-              strokeWidth="4"
-            />
-            <rect x="727" y="98" width="42" height="33" rx="5" fill="#6d5b50" />
-            <path d="M778 105h45v26h-45z" fill="#c57d52" />
-            <path
-              d="M785 101q4-18 9 0M800 101q4-18 9 0"
-              stroke="#f0c997"
-              strokeWidth="3"
-              fill="none"
-            />
-            <circle cx="848" cy="116" r="12" fill="#81a477" />
-          </g>
-          {/* desks, monitors, chairs */}
-          {AGENTS.map((agent) => {
-            const x = agent.x * 9.6;
-            const y = agent.y * 4.8;
-            return (
-              <g key={agent.name} transform={`translate(${x - 47} ${y - 25})`}>
-                <rect
-                  x="0"
-                  y="0"
-                  width="94"
-                  height="47"
-                  rx="6"
-                  fill="#c39e79"
-                  stroke="#907258"
-                  strokeWidth="4"
-                />
-                <rect
-                  x="28"
-                  y="-15"
-                  width="38"
-                  height="25"
-                  rx="3"
-                  fill="#3f5e5a"
-                  stroke="#2e4542"
-                  strokeWidth="4"
-                />
-                <rect
-                  x="34"
-                  y="-10"
-                  width="26"
-                  height="15"
-                  fill={agent.accent}
-                  opacity=".9"
-                />
-                <rect
-                  x="42"
-                  y="47"
-                  width="12"
-                  height="15"
-                  rx="4"
-                  fill="#88766d"
-                />
-                <rect
-                  x="10"
-                  y="10"
-                  width="13"
-                  height="20"
-                  fill="#e7c6a2"
-                  opacity=".7"
-                />
-              </g>
-            );
-          })}
-          {/* plants */}
-          <g fill="#709776" stroke="#52755d" strokeWidth="3">
-            <path d="M73 91q-27-34-38-4q16 4 38 4M73 91q18-39 35-12q-8 13-35 12M73 91q-9-42-28-31q0 21 28 31" />
-            <path d="M867 397q-27-34-38-4q16 4 38 4M867 397q18-39 35-12q-8 13-35 12M867 397q-9-42-28-31q0 21 28 31" />
-          </g>
-          <path
-            d="M52 94h42l-5 28H57zM846 400h42l-5 28h-32z"
-            fill="#c68462"
-            stroke="#996149"
-            strokeWidth="3"
-          />
-          {/* tiny wall labels */}
-          <g fill="#897e72" fontSize="12" fontFamily="monospace">
-            <text x="46" y="177">
-              CAMPAIGN BAY
-            </text>
-            <text x="704" y="177">
-              OPS NOOK
-            </text>
-            <text x="395" y="334">
-              SYNC TABLE
-            </text>
-          </g>
-        </svg>
-        <div className="pixel-office__agents" aria-label="Office agents">
-          {AGENTS.map((agent) => (
-            <button
-              type="button"
-              className={`agent-hotspot ${selected === agent.name ? "is-selected" : ""}`}
-              style={
-                {
-                  left: `${agent.x}%`,
-                  top: `${agent.y}%`,
-                  "--agent-color": agent.color,
-                } as CSSProperties
-              }
-              key={agent.name}
-              onClick={() => selectAgent(agent.name)}
-              aria-label={`Select ${agent.name} agent, status ${statuses[agent.name]}`}
-            >
-              <span className="agent-hotspot__sprite">
-                <b />
-                <i />
-              </span>
-              <span className="agent-hotspot__name">{agent.name}</span>
-              <small
-                className={`agent-status agent-status--${statuses[agent.name] === "Awaiting approval" ? "approval" : statuses[agent.name].toLowerCase()}`}
+        <div className="pixel-office__pan">
+          <svg
+            className="pixel-office__scene"
+            viewBox="0 0 1500 900"
+            role="img"
+            aria-label="Pixel-art office with CEO room, six department rooms, and lounge"
+          >
+            <defs>
+              <pattern
+                id="floor"
+                width="36"
+                height="36"
+                patternUnits="userSpaceOnUse"
               >
-                {statuses[agent.name]}
-              </small>
-            </button>
-          ))}
+                <rect width="36" height="36" fill="#3d3d43" />
+                <rect width="18" height="18" fill="#48464b" />
+              </pattern>
+              <pattern
+                id="lounge-floor"
+                width="36"
+                height="36"
+                patternUnits="userSpaceOnUse"
+              >
+                <rect width="36" height="36" fill="#39464b" />
+                <rect width="18" height="18" fill="#435357" />
+              </pattern>
+            </defs>
+            <rect width="1500" height="900" fill="#e9d8b7" />
+            <rect
+              x="14"
+              y="14"
+              width="1472"
+              height="872"
+              fill="#d0af80"
+              stroke="#443238"
+              strokeWidth="9"
+            />
+            <rect
+              x="28"
+              y="28"
+              width="1444"
+              height="147"
+              fill="url(#floor)"
+              stroke="#332a33"
+              strokeWidth="7"
+            />
+            <path d="M28 36h1444" stroke="#edc477" strokeWidth="11" />
+            <text x="52" y="67" className="svg-label">
+              CEO COORDINATOR · WAR ROOM
+            </text>
+            <rect
+              x="90"
+              y="88"
+              width="210"
+              height="55"
+              fill="#966045"
+              stroke="#342a32"
+              strokeWidth="5"
+            />
+            <rect
+              x="154"
+              y="52"
+              width="70"
+              height="38"
+              fill="#294456"
+              stroke="#1f2d35"
+              strokeWidth="4"
+            />
+            <rect x="166" y="61" width="46" height="20" fill="#8ec8bb" />
+            <rect
+              x="450"
+              y="72"
+              width="600"
+              height="71"
+              fill="#a97750"
+              stroke="#4a3434"
+              strokeWidth="6"
+            />
+            <rect
+              x="510"
+              y="85"
+              width="480"
+              height="38"
+              fill="#ce9c6b"
+              stroke="#714a3e"
+              strokeWidth="4"
+            />
+            {[490, 610, 730, 850, 970].map((x) => (
+              <rect
+                key={x}
+                x={x}
+                y="43"
+                width="42"
+                height="25"
+                fill="#314453"
+                stroke="#242f36"
+                strokeWidth="4"
+              />
+            ))}
+            <g transform="translate(195 105)">
+              <Sprite
+                agent={AGENTS[0]}
+                working={state(AGENTS[0]) === "Working"}
+              />
+            </g>
+            {message(AGENTS[0]) && (
+              <text x="1075" y="110" className="svg-note">
+                {truncate(message(AGENTS[0]) as string)}
+              </text>
+            )}
+            <rect
+              x="28"
+              y="175"
+              width="1444"
+              height="35"
+              fill="#f3e4c4"
+              stroke="#a37b5d"
+              strokeWidth="4"
+            />
+            <text x="52" y="198" className="hall-label">
+              CENTRAL HALL · SHARED CONTEXT
+            </text>
+            {rooms.map((a, i) => (
+              <Room
+                key={a.name}
+                agent={a}
+                index={i}
+                working={state(a) === "Working"}
+                message={message(a)}
+              />
+            ))}
+            <rect
+              x="28"
+              y="430"
+              width="1444"
+              height="25"
+              fill="#f3e4c4"
+              stroke="#a37b5d"
+              strokeWidth="4"
+            />
+            <rect
+              x="28"
+              y="675"
+              width="1444"
+              height="35"
+              fill="#f3e4c4"
+              stroke="#a37b5d"
+              strokeWidth="4"
+            />
+            <text x="52" y="698" className="hall-label">
+              LOUNGE · RESET &amp; REVIEW
+            </text>
+            <rect
+              x="28"
+              y="710"
+              width="1444"
+              height="162"
+              fill="url(#lounge-floor)"
+              stroke="#332a33"
+              strokeWidth="7"
+            />
+            <rect
+              x="85"
+              y="750"
+              width="260"
+              height="43"
+              fill="#9a5a58"
+              stroke="#392a32"
+              strokeWidth="6"
+            />
+            <rect
+              x="1110"
+              y="750"
+              width="260"
+              height="43"
+              fill="#557a78"
+              stroke="#392a32"
+              strokeWidth="6"
+            />
+            <ellipse
+              cx="730"
+              cy="792"
+              rx="165"
+              ry="37"
+              fill="#87614d"
+              stroke="#372d33"
+              strokeWidth="5"
+            />
+            <rect
+              x="1190"
+              y="725"
+              width="125"
+              height="65"
+              fill="#4f6f6c"
+              stroke="#293a3e"
+              strokeWidth="5"
+            />
+            <rect x="1213" y="740" width="79" height="20" fill="#e2c17a" />
+            <path
+              d="M505 844q-32-74-65 0m38-27q-5-49-27-57m24 54q31-46 52-35m810 65q-32-74-65 0m38-27q-5-49-27-57m24 54q31-46 52-35"
+              fill="none"
+              stroke="#76a46e"
+              strokeWidth="10"
+            />
+            <text x="1330" y="747" className="svg-note">
+              VEND
+            </text>
+          </svg>
+          <div className="pixel-office__agents" aria-label="Office agents">
+            {AGENTS.map((a) => {
+              const s = state(a);
+              return (
+                <button
+                  key={a.name}
+                  type="button"
+                  className={`agent-hotspot ${selected === a.name ? "is-selected" : ""}`}
+                  style={
+                    {
+                      left: a.x,
+                      top: a.y,
+                      "--agent-color": a.shirt,
+                    } as CSSProperties
+                  }
+                  onClick={() => select(a.name)}
+                  aria-label={`Select ${a.name} agent, status ${s}`}
+                >
+                  <span className="agent-hotspot__marker" />
+                  <span className="agent-hotspot__name">{a.name}</span>
+                  <small
+                    className={`agent-status agent-status--${s.toLowerCase().replace(" ", "-")}`}
+                  >
+                    {s}
+                  </small>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
       {selectedAgent && (
-        <div className="pixel-office__detail" role="status">
+        <div className="pixel-office__detail">
           <span
             className="detail-avatar"
-            style={{ background: selectedAgent.color }}
+            style={{ background: selectedAgent.shirt }}
           >
-            {selectedAgent.name.slice(0, 1)}
+            {selectedAgent.name[0]}
           </span>
           <div>
             <strong>{selectedAgent.name}</strong>
             <span>{selectedAgent.role}</span>
+            <p>
+              {message(selectedAgent)
+                ? truncate(message(selectedAgent) as string, 110)
+                : `No public messages yet. ${state(selectedAgent)}.`}
+            </p>
           </div>
-          <em>{statuses[selectedAgent.name]}</em>
+          <em>{state(selectedAgent)}</em>
         </div>
       )}
       {!compact && (
         <p className="pixel-office__note">
-          A calm visual map of your local workspace. Statuses reflect workflow
-          steps and approvals; no agents are running in the background.
+          Live statuses come from workflow steps and orchestra messages. The
+          room is quiet when no run is active.
         </p>
       )}
     </section>
