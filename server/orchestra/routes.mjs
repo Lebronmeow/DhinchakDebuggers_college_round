@@ -1,4 +1,7 @@
-import { createOrchestraEngine } from "./engine.mjs";
+import {
+  createOrchestraEngine,
+  DEFAULT_EMPLOYEE_MODELS,
+} from "./engine.mjs";
 
 export async function registerOrchestraRoutes(
   app,
@@ -21,18 +24,37 @@ export async function registerOrchestraRoutes(
     const active = all.find((r) =>
       ["planning", "running", "awaiting_approval"].includes(r.status),
     );
-    return { runs: all, activeRunId: active?.id || null };
+    return {
+      runs: all,
+      activeRunId: active?.id || null,
+      defaultEmployeeModels: DEFAULT_EMPLOYEE_MODELS,
+    };
   };
   app.get("/api/orchestra", (_req, res) => res.json(publicState()));
   app.post("/api/orchestra/runs", async (req, res) => {
     const prompt =
       typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
-    const model =
+    let model =
       typeof req.body?.model === "string" ? req.body.model.trim() : "";
-    const providerId =
+    let providerId =
       typeof req.body?.providerId === "string"
         ? req.body.providerId.trim()
-        : "ollama";
+        : "";
+    if (!providerId) {
+      providerId =
+        providerService?.status().find((p) => p.id === "openrouter")?.configured
+          ? "openrouter"
+          : "ollama";
+    }
+    if (!model) {
+      model = providerId === "openrouter" ? "openrouter/free" : "qwen";
+    }
+    const agentModels =
+      typeof req.body?.agentModels === "object" && req.body?.agentModels !== null
+        ? req.body.agentModels
+        : providerId === "openrouter"
+          ? DEFAULT_EMPLOYEE_MODELS
+          : null;
     if (!prompt || prompt.length > 4000 || !model || model.length > 200)
       return res
         .status(400)
@@ -57,7 +79,10 @@ export async function registerOrchestraRoutes(
             .json({ error: `Model '${model}' is not installed locally` });
       } else if (providerService) {
         const available = await providerService.models(providerId);
-        if (!available.some((m) => m.id === model || m.name === model))
+        if (
+          model !== "openrouter/free" &&
+          !available.some((m) => m.id === model || m.name === model)
+        )
           return res.status(400).json({
             error: `Model '${model}' is not available from ${providerId}`,
           });
@@ -67,6 +92,7 @@ export async function registerOrchestraRoutes(
         model,
         req.socket.localPort,
         providerId,
+        agentModels,
       );
       return res.status(202).json(run);
     } catch (error) {

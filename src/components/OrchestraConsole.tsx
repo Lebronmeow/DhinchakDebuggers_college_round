@@ -65,6 +65,16 @@ const statusLabel = (status: RunStatus) =>
 const isActive = (run?: AgentRun | null) =>
   !!run && ACTIVE.includes(run.status);
 
+export const DEFAULT_EMPLOYEE_MODELS: Record<string, string> = {
+  Coordinator: "openrouter/free",
+  Website: "liquid/lfm-2.5-2.6b:free",
+  Growth: "google/gemma-4-26b-a4b-it:free",
+  Events: "google/gemma-4-31b-it:free",
+  CRM: "dots-studio/dots-3-note-preview:free",
+  Billing: "poolside/laguna-s-2.1:free",
+  Review: "cohere/north-mini-code:free",
+};
+
 export function useOrchestra() {
   return {
     get: () => api<OrchestraResponse>("/orchestra"),
@@ -140,9 +150,23 @@ function MessageThread({
           key={message.id}
         >
           <div className="oc-message-route">
-            <span>{message.from}</span>
+            <span className="oc-agent-from">
+              <strong>{message.from}</strong>
+              {run.agentModels?.[message.from] && (
+                <span className="oc-role-model-tag">
+                  {run.agentModels[message.from].replace(":free", "")}
+                </span>
+              )}
+            </span>
             <ArrowUpRight size={13} />
-            <span>{message.to}</span>
+            <span className="oc-agent-to">
+              <strong>{message.to}</strong>
+              {run.agentModels?.[message.to] && (
+                <span className="oc-role-model-tag">
+                  {run.agentModels[message.to].replace(":free", "")}
+                </span>
+              )}
+            </span>
             <time>{date(message.createdAt)}</time>
           </div>
           <p>{message.text}</p>
@@ -175,7 +199,10 @@ export default function OrchestraConsole({
   const [models, setModels] = useState<string[]>([]);
   const [routedModels, setRoutedModels] = useState<RoutedModel[]>([]);
   const [model, setModel] = useState("");
-  const [providerId, setProviderId] = useState("ollama");
+  const [providerId, setProviderId] = useState("openrouter");
+  const [employeeModels, setEmployeeModels] = useState<Record<string, string>>(
+    DEFAULT_EMPLOYEE_MODELS,
+  );
   const [aiError, setAiError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -224,10 +251,25 @@ export default function OrchestraConsole({
         if (!mounted.current) return;
         const installed = status.models || [];
         setModels(installed);
-        setModel((current) => current || installed[0] || "");
-        const discovered = catalog.models || [];
+        const discovered = (catalog.models || []).filter(
+          (m) =>
+            !m.id.toLowerCase().includes("nvidia") &&
+            !m.name.toLowerCase().includes("nvidia"),
+        );
         setRoutedModels(discovered);
-        if (discovered.length && !installed.length) {
+        const openRouterModels = discovered.filter(
+          (m) => m.provider === "openrouter",
+        );
+        if (openRouterModels.length) {
+          setProviderId("openrouter");
+          const defaultModel =
+            openRouterModels.find((m) => m.id === "openrouter/free")?.id ||
+            openRouterModels[0].id;
+          setModel(defaultModel);
+        } else if (installed.length) {
+          setProviderId("ollama");
+          setModel(installed[0]);
+        } else if (discovered.length) {
           setProviderId(discovered[0].provider);
           setModel(discovered[0].id);
         }
@@ -299,10 +341,12 @@ export default function OrchestraConsole({
     setBusy(true);
     setError("");
     try {
-      const request = {
+      const request: Record<string, unknown> = {
         prompt: text,
         model,
-        ...(providerId !== "ollama" ? { providerId } : {}),
+        ...(providerId !== "ollama"
+          ? { providerId, agentModels: employeeModels }
+          : {}),
       };
       const run = await api<AgentRun>("/orchestra/runs", "POST", request);
       if (!mounted.current) return;
@@ -366,20 +410,22 @@ export default function OrchestraConsole({
               const routed = routedModels.find((item) => item.id === next);
               if (routed) setProviderId(routed.provider);
             }}
-            disabled={busy || !models.length}
+            disabled={busy || (!models.length && !routedModels.length)}
           >
-            <option value="">Choose installed model</option>
+            <option value="">Choose model</option>
             {routedModels.length
-              ? routedModels.map((item) => (
-                  <option
-                    key={`${item.provider}:${item.id}`}
-                    value={item.id}
-                    data-provider={item.provider}
-                  >
-                    {item.provider} · {item.name}
-                    {item.free ? " · catalog free" : ""}
-                  </option>
-                ))
+              ? routedModels
+                  .filter((item) => !item.id.toLowerCase().includes("nvidia"))
+                  .map((item) => (
+                    <option
+                      key={`${item.provider}:${item.id}`}
+                      value={item.id}
+                      data-provider={item.provider}
+                    >
+                      {item.provider} · {item.name}
+                      {item.free ? " · catalog free" : ""}
+                    </option>
+                  ))
               : models.map((item) => (
                   <option key={item} value={item}>
                     {item}
@@ -403,6 +449,48 @@ export default function OrchestraConsole({
             disabled={busy}
           />
         </label>
+        <div className="oc-employee-models">
+          <div className="oc-employee-models-head">
+            <strong>Employee AI Team (Distinct free models per role)</strong>
+            <button
+              type="button"
+              className="oc-btn-ghost"
+              onClick={() => setEmployeeModels(DEFAULT_EMPLOYEE_MODELS)}
+            >
+              Reset to defaults
+            </button>
+          </div>
+          <div className="oc-employee-grid">
+            {Object.entries(employeeModels).map(([role, assignedModel]) => (
+              <div key={role} className="oc-employee-card">
+                <span className="oc-employee-role">{role}</span>
+                <select
+                  value={assignedModel}
+                  onChange={(e) =>
+                    setEmployeeModels((prev) => ({
+                      ...prev,
+                      [role]: e.target.value,
+                    }))
+                  }
+                  disabled={busy}
+                >
+                  {routedModels
+                    .filter(
+                      (m) => m.free && !m.id.toLowerCase().includes("nvidia"),
+                    )
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || m.id}
+                      </option>
+                    ))}
+                  {!routedModels.some((m) => m.id === assignedModel) && (
+                    <option value={assignedModel}>{assignedModel}</option>
+                  )}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
         <button
           className="oc-run"
           type="submit"

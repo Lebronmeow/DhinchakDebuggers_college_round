@@ -10,6 +10,15 @@ const roles = new Set([
   "Billing",
   "Review",
 ]);
+export const DEFAULT_EMPLOYEE_MODELS = {
+  Coordinator: "openrouter/free",
+  Website: "liquid/lfm-2.5-2.6b:free",
+  Growth: "google/gemma-4-26b-a4b-it:free",
+  Events: "google/gemma-4-31b-it:free",
+  CRM: "dots-studio/dots-3-note-preview:free",
+  Billing: "poolside/laguna-s-2.1:free",
+  Review: "cohere/north-mini-code:free",
+};
 const runnable = new Set(["queued", "planning", "running"]);
 const stamp = () => new Date().toISOString();
 
@@ -112,8 +121,9 @@ export function createOrchestraEngine({
         const ask =
           providerService?.askProvider ||
           ((_, args) => askOllama(ollamaFetch, args));
+        const coordModel = run.agentModels?.Coordinator || run.model;
         const plan = await ask(run.providerId || "ollama", {
-          model: run.model,
+          model: coordModel,
           system: coordinatorSystem,
           user: run.prompt,
           schema: coordinatorSchema,
@@ -240,8 +250,10 @@ export function createOrchestraEngine({
       const ask =
         providerService?.askProvider ||
         ((_, args) => askOllama(ollamaFetch, args));
+      const specModel = run.agentModels?.[task.agent] || run.model;
+      task.model = specModel;
       const result = await ask(run.providerId || "ollama", {
-        model: run.model,
+        model: specModel,
         system: specialistSystem(task.agent, catalog),
         user: JSON.stringify({
           goal: run.prompt,
@@ -427,12 +439,21 @@ export function createOrchestraEngine({
     interruptOnStart,
     schedule,
     controllers,
-    async create(prompt, model, port, providerId = "ollama") {
+    async create(
+      prompt,
+      model,
+      port,
+      providerId = "ollama",
+      agentModels = null,
+    ) {
       const run = {
         id: `run_${crypto.randomUUID()}`,
         prompt,
         model,
         providerId,
+        agentModels:
+          agentModels ||
+          (providerId === "openrouter" ? { ...DEFAULT_EMPLOYEE_MODELS } : {}),
         title: "Planning…",
         status: "queued",
         tasks: [],

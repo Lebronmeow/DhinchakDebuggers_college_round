@@ -133,6 +133,34 @@ async function requestJSON(
   }
 }
 
+export function cleanJSON(raw) {
+  if (typeof raw !== "string") return "";
+  let s = raw.trim();
+  s = s
+    .replace(/<think[\s\S]*?<\/think>/gi, "")
+    .replace(/<thought[\s\S]*?<\/thought>/gi, "")
+    .trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fence) {
+    s = fence[1].trim();
+  } else {
+    const startObj = s.indexOf("{");
+    const endObj = s.lastIndexOf("}");
+    const startArr = s.indexOf("[");
+    const endArr = s.lastIndexOf("]");
+    if (
+      startObj !== -1 &&
+      endObj > startObj &&
+      (startArr === -1 || startObj < startArr)
+    ) {
+      s = s.slice(startObj, endObj + 1);
+    } else if (startArr !== -1 && endArr > startArr) {
+      s = s.slice(startArr, endArr + 1);
+    }
+  }
+  return s;
+}
+
 // Validate the shared coordinator/specialist JSON-schema subset, including tool enums.
 function validate(value, schema) {
   if (!schema || typeof schema !== "object") return;
@@ -145,8 +173,10 @@ function validate(value, schema) {
       if (
         schema.additionalProperties === false &&
         !Object.hasOwn(schema.properties || {}, key)
-      )
-        throw new Error("Provider returned invalid structured JSON");
+      ) {
+        delete value[key];
+        continue;
+      }
       validate(item, schema.properties?.[key]);
     }
   } else if (schema.type === "array") {
@@ -164,11 +194,20 @@ function validate(value, schema) {
 }
 
 export function filterFreeModels(models) {
-  return models.filter((model) => model.free === true);
+  return models.filter(
+    (model) =>
+      model.free === true &&
+      !model.id.toLowerCase().includes("nvidia") &&
+      !(typeof model.name === "string" && model.name.toLowerCase().includes("nvidia")),
+  );
 }
 
 function normalizeRemoteModel(model) {
   if (typeof model?.id !== "string" || model.id.length > 200) return null;
+  const idLower = model.id.toLowerCase();
+  const nameLower =
+    typeof model.name === "string" ? model.name.toLowerCase() : "";
+  if (idLower.includes("nvidia") || nameLower.includes("nvidia")) return null;
   const zero = (v) =>
     (typeof v === "string" || typeof v === "number") &&
     String(v).trim() !== "" &&
@@ -288,17 +327,41 @@ export function createProviderService({
               json_schema: { name: "orchestra_response", strict: true, schema },
             },
           };
-    const data = await requestJSON(
-      id === "ollama" ? ollamaFetch : providerFetch,
-      `${c.base}/${id === "ollama" ? "api/chat" : "chat/completions"}`,
-      {
-        method: "POST",
-        headers: headers(c),
-        body: JSON.stringify(body),
-      },
-      { signal, timeoutMs: 120000 },
-    );
-    const content =
+    let data;
+    try {
+      data = await requestJSON(
+        id === "ollama" ? ollamaFetch : providerFetch,
+        `${c.base}/${id === "ollama" ? "api/chat" : "chat/completions"}`,
+        {
+          method: "POST",
+          headers: headers(c),
+          body: JSON.stringify(body),
+        },
+        { signal, timeoutMs: 120000 },
+      );
+    } catch (err) {
+      if (
+        id === "openrouter" &&
+        model !== "openrouter/free" &&
+        !signal?.aborted &&
+        !/canceled/i.test(err.message)
+      ) {
+        body.model = "openrouter/free";
+        data = await requestJSON(
+          providerFetch,
+          `${c.base}/chat/completions`,
+          {
+            method: "POST",
+            headers: headers(c),
+            body: JSON.stringify(body),
+          },
+          { signal, timeoutMs: 120000 },
+        );
+      } else {
+        throw err;
+      }
+    }
+    let content =
       id === "ollama"
         ? data?.message?.content
         : data?.choices?.[0]?.message?.content;
@@ -306,11 +369,35 @@ export function createProviderService({
       throw new Error("Provider returned no message content");
     let parsed;
     try {
-      parsed = JSON.parse(content);
-    } catch {
-      throw new Error("Provider returned invalid structured JSON");
+      parsed = JSON.parse(cleanJSON(content));
+      validate(parsed, schema);
+    } catch (parseErr) {
+      if (
+        id === "openrouter" &&
+        model !== "openrouter/free" &&
+        !signal?.aborted
+      ) {
+        body.model = "openrouter/free";
+        const retryData = await requestJSON(
+          providerFetch,
+          `${c.base}/chat/completions`,
+          {
+            method: "POST",
+            headers: headers(c),
+            body: JSON.stringify(body),
+          },
+          { signal, timeoutMs: 120000 },
+        );
+        try {
+          parsed = JSON.parse(cleanJSON(content));
+          validate(parsed, schema);
+        } catch {
+          throw new Error("Provider returned invalid structured JSON");
+        }
+      } else {
+        throw new Error("Provider returned invalid structured JSON");
+      }
     }
-    validate(parsed, schema);
     return parsed;
   }
 

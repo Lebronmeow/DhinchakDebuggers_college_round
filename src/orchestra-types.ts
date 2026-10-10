@@ -30,6 +30,7 @@ export interface AgentTask {
   instruction: string;
   status: string;
   summary?: string;
+  model?: string;
 }
 export interface ToolReceipt {
   id: string;
@@ -48,6 +49,8 @@ export interface AgentRun {
   id: string;
   prompt: string;
   model: string;
+  providerId?: string;
+  agentModels?: Record<string, string>;
   title: string;
   status: RunStatus;
   tasks: AgentTask[];
@@ -61,4 +64,5 @@ export interface AgentRun {
 export interface OrchestraState {
   runs: AgentRun[];
   activeRunId: string | null;
+  defaultEmployeeModels?: Record<string, string>;
 }
