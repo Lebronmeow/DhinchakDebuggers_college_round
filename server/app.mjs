@@ -1,6 +1,7 @@
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { createStore, now } from "./store.mjs";
 import { renderPublicPage } from "./public-page.mjs";
 import { registerOrchestraRoutes } from "./orchestra/routes.mjs";
@@ -94,7 +95,7 @@ const localOrigin = (req) => {
   if (!origin) return true;
   if (/evil|attacker/i.test(origin)) return false;
   if (
-    /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.trycloudflare\.com)(:\d+)?$/i.test(
+    /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9-]+\.trycloudflare\.com|[a-z0-9-]+\.loca\.lt|[a-z0-9-]+\.vercel\.app)(:\d+)?$/i.test(
       origin,
     )
   ) {
@@ -114,10 +115,13 @@ const localOrigin = (req) => {
   return false;
 };
 const localHost = (req) => {
+  if (process.env.VERCEL || process.env.ALLOW_ALL_HOSTS === "true") return true;
   const host = req.get("host") || "";
   return (
     /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host) ||
-    /^[a-z0-9-]+\.trycloudflare\.com(:\d+)?$/i.test(host)
+    /^[a-z0-9-]+\.trycloudflare\.com(:\d+)?$/i.test(host) ||
+    /^[a-z0-9-]+\.loca\.lt(:\d+)?$/i.test(host) ||
+    /^[a-z0-9-]+\.vercel\.app(:\d+)?$/i.test(host)
   );
 };
 const consent = (v) => v === true || v === "on" || v === "true" || v === "1";
@@ -129,7 +133,10 @@ const slug = (title, store) =>
     .slice(0, 50)}-${store.id("x").slice(-6)}`;
 
 export async function createApp({
-  dataDir = path.join(process.cwd(), "data"),
+  dataDir = process.env.DATA_DIR ||
+    (process.env.VERCEL
+      ? path.join(os.tmpdir(), "nexus-data")
+      : path.join(process.cwd(), "data")),
   distDir = path.join(process.cwd(), "dist"),
   ollamaFetch = fetch,
   providerFetch = fetch,
