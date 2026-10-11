@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type {
   Approval,
@@ -37,15 +37,33 @@ import DashboardCharts from "./DashboardCharts";
 import "./modules.css";
 import "./dashboard-charts.css";
 
-const date = (v: string) =>
-  v
-    ? new Date(v).toLocaleString([], {
+const date = (v: string) => {
+  if (!v) return "Date not set";
+  const parsed = new Date(v);
+  return Number.isNaN(parsed.getTime())
+    ? "Date not set"
+    : parsed.toLocaleString([], {
         dateStyle: "medium",
         timeStyle: "short",
-      })
-    : "Date not set";
-const iso = (v: string) => (v ? new Date(v).toISOString() : undefined);
+      });
+};
+const iso = (v: string) => {
+  if (!v) return undefined;
+  const parsed = new Date(v);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+};
+const localDateTime = (v: string) => {
+  if (!v) return "";
+  const parsed = new Date(v);
+  return Number.isNaN(parsed.getTime())
+    ? ""
+    : parsed.toLocaleString("sv-SE").slice(0, 16);
+};
 const money = (n: number) => `$${n.toLocaleString("en-US")}`;
+const displayLabel = (value: string) =>
+  value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 function Button({
   children,
   onClick,
@@ -95,7 +113,14 @@ function Shell({
   );
 }
 function Empty({ text }: { text: string }) {
-  return <div className="nx-empty">{text}</div>;
+  return (
+    <div className="nx-empty" role="status" aria-live="polite">
+      <span className="nx-empty-mark" aria-hidden="true">
+        ○
+      </span>
+      <span>{text}</span>
+    </div>
+  );
 }
 function useAction(
   refresh: () => Promise<void>,
@@ -129,6 +154,7 @@ function Drawer({
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const titleId = useId();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -169,11 +195,15 @@ function Drawer({
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="nx-drawer-title"
+        aria-labelledby={titleId}
       >
         <header>
-          <h2 id="nx-drawer-title">{title}</h2>
-          <button onClick={onClose} aria-label="Close">
+          <h2 id={titleId}>{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={`Close ${title.toLowerCase()}`}
+          >
             <X size={18} />
           </button>
         </header>
@@ -277,7 +307,7 @@ function Crm({ p }: { p: ModuleProps }) {
       eyebrow="Customer relationship"
       title="CRM & Leads"
       action={
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div className="nx-page-actions">
           <Button quiet onClick={seedSample} disabled={busy}>
             <Sparkles size={15} />
             Load 50 Sample Leads
@@ -289,7 +319,7 @@ function Crm({ p }: { p: ModuleProps }) {
         </div>
       }
     >
-      <div className="nx-metrics nx-crm-kpis" style={{ marginBottom: 20 }}>
+      <div className="nx-metrics nx-crm-kpis">
         <div className="nx-metric">
           <span>Total Contacts</span>
           <strong>{p.state.contacts.length}</strong>
@@ -349,102 +379,107 @@ function Crm({ p }: { p: ModuleProps }) {
       </div>
 
       <div className="nx-panel nx-table-wrap">
-        <table className="nx-table">
-          <thead>
-            <tr>
-              <th>Contact</th>
-              <th>Company</th>
-              <th>Stage</th>
-              <th>Consent</th>
-              <th>Notes / Phone</th>
-              <th>Added</th>
-              <th style={{ textAlign: "right" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  <strong>{c.name}</strong>
-                  <small>{c.email}</small>
-                  {c.phone && (
-                    <small style={{ color: "var(--muted)" }}>
-                      📞 {c.phone}
-                    </small>
-                  )}
-                </td>
-                <td>{c.company || "—"}</td>
-                <td>
-                  <select
-                    aria-label={`Stage for ${c.name}`}
-                    className="nx-stage"
-                    value={c.stage}
-                    disabled={busy}
-                    onChange={(e) =>
-                      run(
-                        () =>
-                          api(`/contacts/${c.id}`, "PATCH", {
-                            stage: e.target.value,
-                          }),
-                        "Stage updated",
-                      )
-                    }
-                  >
-                    <option value="lead">lead</option>
-                    <option value="qualified">qualified</option>
-                    <option value="customer">customer</option>
-                  </select>
-                </td>
-                <td>
-                  <button
-                    className={`nx-badge ${c.consent ? "nx-good" : "nx-muted"}`}
-                    disabled={busy}
-                    onClick={() =>
-                      run(
-                        () =>
-                          api(`/contacts/${c.id}`, "PATCH", {
-                            consent: !c.consent,
-                          }),
-                        c.consent ? "Opted out" : "Opted in",
-                      )
-                    }
-                  >
-                    {c.consent ? "Opted in" : "Opted out"}
-                  </button>
-                </td>
-                <td>
-                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>
-                    {c.notes || c.source || "—"}
-                  </span>
-                </td>
-                <td>{date(c.createdAt)}</td>
-                <td style={{ textAlign: "right" }}>
-                  <div style={{ display: "inline-flex", gap: "6px" }}>
-                    <button
-                      type="button"
-                      className="nx-btn nx-btn-quiet"
-                      style={{ padding: "4px 8px" }}
-                      title="Edit contact"
-                      onClick={() => setEditingContact({ ...c })}
-                    >
-                      <Edit3 size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      className="nx-btn nx-btn-quiet"
-                      style={{ padding: "4px 8px", color: "#c85a32" }}
-                      title="Delete contact"
-                      onClick={() => deleteContact(c)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </td>
+        {list.length ? (
+          <table className="nx-table">
+            <caption className="nx-sr">Contacts and lead pipeline</caption>
+            <thead>
+              <tr>
+                <th>Contact</th>
+                <th>Company</th>
+                <th>Stage</th>
+                <th>Consent</th>
+                <th>Notes / Phone</th>
+                <th>Added</th>
+                <th className="nx-table-actions-heading">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {!list.length && <Empty text="No contacts match this view." />}
+            </thead>
+            <tbody>
+              {list.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <strong>{c.name}</strong>
+                    <small>{c.email}</small>
+                    {c.phone && (
+                      <small style={{ color: "var(--muted)" }}>
+                        📞 {c.phone}
+                      </small>
+                    )}
+                  </td>
+                  <td>{c.company || "—"}</td>
+                  <td>
+                    <select
+                      aria-label={`Stage for ${c.name}`}
+                      className="nx-stage"
+                      value={c.stage}
+                      disabled={busy}
+                      onChange={(e) =>
+                        run(
+                          () =>
+                            api(`/contacts/${c.id}`, "PATCH", {
+                              stage: e.target.value,
+                            }),
+                          "Stage updated",
+                        )
+                      }
+                    >
+                      <option value="lead">Lead</option>
+                      <option value="qualified">Qualified</option>
+                      <option value="customer">Customer</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className={`nx-badge ${c.consent ? "nx-good" : "nx-muted"}`}
+                      disabled={busy}
+                      onClick={() =>
+                        run(
+                          () =>
+                            api(`/contacts/${c.id}`, "PATCH", {
+                              consent: !c.consent,
+                            }),
+                          c.consent ? "Opted out" : "Opted in",
+                        )
+                      }
+                    >
+                      {c.consent ? "Opted in" : "Opted out"}
+                    </button>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+                      {c.notes || c.source || "—"}
+                    </span>
+                  </td>
+                  <td>{date(c.createdAt)}</td>
+                  <td className="nx-table-actions-cell">
+                    <div className="nx-table-actions">
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-quiet nx-icon-btn"
+                        title={`Edit ${c.name}`}
+                        aria-label={`Edit ${c.name}`}
+                        onClick={() => setEditingContact({ ...c })}
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-quiet nx-icon-btn nx-icon-btn-danger"
+                        title={`Delete ${c.name}`}
+                        aria-label={`Delete ${c.name}`}
+                        onClick={() => deleteContact(c)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <Empty text="No contacts match these filters." />
+        )}
       </div>
 
       {open && (
@@ -488,9 +523,9 @@ function Crm({ p }: { p: ModuleProps }) {
                 value={form.stage}
                 onChange={(e) => setForm({ ...form, stage: e.target.value })}
               >
-                <option value="lead">lead</option>
-                <option value="qualified">qualified</option>
-                <option value="customer">customer</option>
+                <option value="lead">Lead</option>
+                <option value="qualified">Qualified</option>
+                <option value="customer">Customer</option>
               </select>
             </label>
             <label>
@@ -581,9 +616,9 @@ function Crm({ p }: { p: ModuleProps }) {
                   })
                 }
               >
-                <option value="lead">lead</option>
-                <option value="qualified">qualified</option>
-                <option value="customer">customer</option>
+                <option value="lead">Lead</option>
+                <option value="qualified">Qualified</option>
+                <option value="customer">Customer</option>
               </select>
             </label>
             <label>
@@ -674,6 +709,7 @@ function Websites({ p }: { p: ModuleProps }) {
       : Promise.resolve(false);
   const create = async () => {
     try {
+      setBusy(true);
       const x = await api<Page>("/pages", "POST", {
         title: "New page",
         headline: "Your next chapter starts here",
@@ -688,6 +724,8 @@ function Websites({ p }: { p: ModuleProps }) {
       p.notify("Page created");
     } catch (e) {
       p.notify(e instanceof Error ? e.message : "Unable to create page", true);
+    } finally {
+      setBusy(false);
     }
   };
   const move = (i: number, b: number) => {
@@ -704,7 +742,7 @@ function Websites({ p }: { p: ModuleProps }) {
       eyebrow="Public presence"
       title="Website studio"
       action={
-        <Button onClick={create}>
+        <Button onClick={create} disabled={busy}>
           <Plus size={16} />
           New page
         </Button>
@@ -712,9 +750,13 @@ function Websites({ p }: { p: ModuleProps }) {
     >
       <div className="nx-studio">
         <div className="nx-panel nx-page-list">
-          <div className="nx-panel-title">Pages</div>
+          <div className="nx-panel-title">
+            <span>Pages</span>
+            <span>{p.state.pages.length}</span>
+          </div>
           {p.state.pages.map((x) => (
             <button
+              type="button"
               className={
                 selected?.id === x.id ? "nx-list-item active" : "nx-list-item"
               }
@@ -726,9 +768,14 @@ function Websites({ p }: { p: ModuleProps }) {
               }}
             >
               <strong>{x.title}</strong>
-              <span className="nx-badge nx-muted">{x.status}</span>
+              <span className="nx-badge nx-muted">
+                {displayLabel(x.status)}
+              </span>
             </button>
           ))}
+          {!p.state.pages.length && (
+            <p className="nx-list-empty">No landing sites yet.</p>
+          )}
         </div>
         {draft ? (
           <div className="nx-studio-main">
@@ -736,6 +783,7 @@ function Websites({ p }: { p: ModuleProps }) {
               <div className="nx-panel-title">
                 Block editor{" "}
                 <button
+                  type="button"
                   className="nx-btn nx-btn-quiet"
                   onClick={() => {
                     if (selected) {
@@ -788,18 +836,20 @@ function Websites({ p }: { p: ModuleProps }) {
                 </strong>
                 {draft.blocks.map((b, i) => (
                   <div className="nx-block" key={`${b}-${i}`}>
-                    <span>{b}</span>
+                    <span>{displayLabel(b)}</span>
                     <button
+                      type="button"
                       onClick={() => move(i, -1)}
                       disabled={i === 0}
-                      aria-label="Move block up"
+                      aria-label={`Move ${displayLabel(b)} block up`}
                     >
                       <ChevronUp size={15} />
                     </button>
                     <button
+                      type="button"
                       onClick={() => move(i, 1)}
                       disabled={i === draft.blocks.length - 1}
-                      aria-label="Move block down"
+                      aria-label={`Move ${displayLabel(b)} block down`}
                     >
                       <ChevronDown size={15} />
                     </button>
@@ -910,9 +960,7 @@ function Websites({ p }: { p: ModuleProps }) {
                     ? "Live Published"
                     : "Draft Mode"}
                 </span>
-                <span
-                  style={{ display: "flex", gap: "8px", alignItems: "center" }}
-                >
+                <span className="nx-preview-actions">
                   <a
                     className="nx-btn nx-btn-quiet"
                     href={`/p/${draft.slug}?preview=1`}
@@ -948,6 +996,7 @@ function Websites({ p }: { p: ModuleProps }) {
                     </a>
                   )}
                   <button
+                    type="button"
                     className={
                       device === "desktop" ? "nx-device active" : "nx-device"
                     }
@@ -956,6 +1005,7 @@ function Websites({ p }: { p: ModuleProps }) {
                     Desktop
                   </button>
                   <button
+                    type="button"
                     className={
                       device === "mobile" ? "nx-device active" : "nx-device"
                     }
@@ -1132,10 +1182,11 @@ function Websites({ p }: { p: ModuleProps }) {
                           marginBottom: "12px",
                         }}
                       >
-                        Space is strictly limited. Confirm below.
+                        Reserve a place by completing the form.
                       </div>
                       <input
-                        disabled
+                        readOnly
+                        aria-label="Preview name field"
                         placeholder="Your Name"
                         style={{
                           width: "100%",
@@ -1148,7 +1199,9 @@ function Websites({ p }: { p: ModuleProps }) {
                         }}
                       />
                       <input
-                        disabled
+                        readOnly
+                        type="email"
+                        aria-label="Preview email field"
                         placeholder="Your Email (alex@example.com)"
                         style={{
                           width: "100%",
@@ -1161,7 +1214,10 @@ function Websites({ p }: { p: ModuleProps }) {
                         }}
                       />
                       <button
-                        disabled
+                        type="button"
+                        aria-disabled="true"
+                        title="Available on the published page"
+                        onClick={(event) => event.preventDefault()}
                         style={{
                           width: "100%",
                           padding: "10px",
@@ -1176,9 +1232,12 @@ function Websites({ p }: { p: ModuleProps }) {
                       >
                         Register Your Interest →
                       </button>
+                      <p className="nx-preview-note">
+                        Registration is available on the published page.
+                      </p>
                     </div>
                   ) : (
-                    <p key={i}>{b}</p>
+                    <p key={i}>{displayLabel(b)}</p>
                   ),
                 )}
                 <div
@@ -1241,9 +1300,7 @@ function Webinars({ p }: { p: ModuleProps }) {
         ? {
             title: w.title,
             description: w.description,
-            startsAt: w.startsAt
-              ? new Date(w.startsAt).toLocaleString("sv-SE").slice(0, 16)
-              : "",
+            startsAt: localDateTime(w.startsAt),
             capacity: w.capacity,
             joinUrl: w.joinUrl,
           }
@@ -1287,15 +1344,17 @@ function Webinars({ p }: { p: ModuleProps }) {
       }
     >
       <div className="nx-notice">
-        Integrated with Jitsi Meet Live Video API. Attendees receive instant access links and automated invites from meowlover102@gmail.com.
+        Integrated with Jitsi Meet Live Video. Attendees receive instant access
+        links and automated invites from your configured sender.
       </div>
       <div className="nx-cards">
         {p.state.webinars.map((w) => (
           <article className="nx-panel nx-card" key={w.id}>
             <div className="nx-card-top">
-              <span className="nx-badge nx-good">{w.status}</span>
-              <span>
+              <span className="nx-badge nx-good">{displayLabel(w.status)}</span>
+              <span className="nx-card-capacity">
                 {w.registrations.length}/{w.capacity}
+                <small> seats filled</small>
               </span>
             </div>
             <h3>{w.title}</h3>
@@ -1304,7 +1363,7 @@ function Webinars({ p }: { p: ModuleProps }) {
             <div className="nx-card-actions">
               <Button quiet onClick={() => begin(w)}>
                 <Settings2 size={14} />
-                Configure / edit
+                Configure webinar
               </Button>
               {/^https?:\/\//i.test(w.joinUrl) ? (
                 <a
@@ -1370,10 +1429,12 @@ function Webinars({ p }: { p: ModuleProps }) {
                 {w.registrations.map((r) => (
                   <div className="nx-register-row" key={r.contactId}>
                     <span>
-                      {p.state.contacts.find((c) => c.id === r.contactId)?.name ||
-                        "Unknown"}
+                      {p.state.contacts.find((c) => c.id === r.contactId)
+                        ?.name || "Unknown"}
                     </span>
                     <button
+                      type="button"
+                      aria-pressed={r.attended}
                       disabled={busy}
                       onClick={() =>
                         run(
@@ -1394,6 +1455,9 @@ function Webinars({ p }: { p: ModuleProps }) {
             )}
           </article>
         ))}
+        {!p.state.webinars.length && (
+          <Empty text="No webinars yet. Create an event to start inviting attendees." />
+        )}
       </div>
       {open && (
         <Drawer
@@ -1495,14 +1559,15 @@ function Campaigns({ p }: { p: ModuleProps }) {
       <div className="nx-cards">
         {p.state.campaigns.map((c) => (
           <article className="nx-panel nx-card" key={c.id}>
-            <span className="nx-badge nx-warn">{c.status}</span>
+            <span className="nx-badge nx-warn">{displayLabel(c.status)}</span>
             <h3>{c.name}</h3>
             <p>
               <strong>{c.subject}</strong>
             </p>
             <p>{c.body}</p>
             <small>
-              Audience: {c.audience || "Not defined"} · {date(c.scheduledAt)}
+              Audience: {displayLabel(c.audience || "not defined")} ·{" "}
+              {date(c.scheduledAt)}
             </small>
             {c.status === "draft" && (
               <Button
@@ -1520,6 +1585,9 @@ function Campaigns({ p }: { p: ModuleProps }) {
             )}
           </article>
         ))}
+        {!p.state.campaigns.length && (
+          <Empty text="No campaigns yet. Compose a draft to start planning outreach." />
+        )}
       </div>
       {open && (
         <Drawer title="Compose campaign" onClose={() => setOpen(false)}>
@@ -1555,10 +1623,10 @@ function Campaigns({ p }: { p: ModuleProps }) {
                 value={f.audience}
                 onChange={(e) => setF({ ...f, audience: e.target.value })}
               >
-                <option>all</option>
-                <option>lead</option>
-                <option>qualified</option>
-                <option>customer</option>
+                <option value="all">All contacts</option>
+                <option value="lead">Leads</option>
+                <option value="qualified">Qualified leads</option>
+                <option value="customer">Customers</option>
               </select>
             </label>
             <label>
@@ -1585,7 +1653,9 @@ function Billing({ p }: { p: ModuleProps }) {
   return (
     <Shell eyebrow="Sandbox commerce" title="Billing">
       <div className="nx-notice">
-        Sandbox Checkout Active. Registrations on published website pages automatically process $49.00 test cards, upgrade contacts to customers, and record subscriptions here.
+        Sandbox checkout is active. Registrations on published website pages
+        process $49.00 test cards, upgrade contacts to customers, and record
+        subscriptions here.
       </div>
       <div className="nx-plan-grid">
         {p.state.plans.map((x) => (
@@ -1601,6 +1671,9 @@ function Billing({ p }: { p: ModuleProps }) {
             </p>
           </div>
         ))}
+        {!p.state.plans.length && (
+          <Empty text="No sandbox plans are configured." />
+        )}
       </div>
       <div className="nx-panel nx-subscribe">
         <h3>Create sandbox subscription</h3>
@@ -1646,63 +1719,68 @@ function Billing({ p }: { p: ModuleProps }) {
         </Button>
       </div>
       <div className="nx-panel nx-table-wrap">
-        <table className="nx-table">
-          <thead>
-            <tr>
-              <th>Subscriber</th>
-              <th>Usage</th>
-              <th>Sandbox estimate</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {p.state.subscriptions.map((s) => (
-              <tr key={s.id}>
-                <td>
-                  {p.state.contacts.find((c) => c.id === s.contactId)?.name ||
-                    "Unknown"}
-                </td>
-                <td>
-                  <UsageInput subscription={s} busy={busy} run={run} />
-                </td>
-                <td>
-                  {(() => {
-                    const plan = p.state.plans.find((x) => x.id === s.planId);
-                    return plan
-                      ? money(
-                          plan.amount +
-                            Math.max(0, s.usage - plan.includedUsage) *
-                              plan.overageRate,
-                        )
-                      : "—";
-                  })()}
-                  <small>Not an invoice or payment</small>
-                </td>
-                <td>
-                  <span className="nx-badge nx-muted">{s.status}</span>
-                </td>
-                <td>
-                  <Button
-                    quiet
-                    disabled={busy || s.status === "canceled"}
-                    onClick={() =>
-                      run(
-                        () =>
-                          api(`/subscriptions/${s.id}`, "PATCH", {
-                            status: "canceled",
-                          }),
-                        "Sandbox subscription canceled",
-                      )
-                    }
-                  >
-                    Cancel sandbox
-                  </Button>
-                </td>
+        {p.state.subscriptions.length > 0 && (
+          <table className="nx-table">
+            <caption className="nx-sr">Sandbox subscriptions and usage</caption>
+            <thead>
+              <tr>
+                <th>Subscriber</th>
+                <th>Usage</th>
+                <th>Sandbox estimate</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {p.state.subscriptions.map((s) => (
+                <tr key={s.id}>
+                  <td>
+                    {p.state.contacts.find((c) => c.id === s.contactId)?.name ||
+                      "Unknown"}
+                  </td>
+                  <td>
+                    <UsageInput subscription={s} busy={busy} run={run} />
+                  </td>
+                  <td>
+                    {(() => {
+                      const plan = p.state.plans.find((x) => x.id === s.planId);
+                      return plan
+                        ? money(
+                            plan.amount +
+                              Math.max(0, s.usage - plan.includedUsage) *
+                                plan.overageRate,
+                          )
+                        : "—";
+                    })()}
+                    <small>Not an invoice or payment</small>
+                  </td>
+                  <td>
+                    <span className="nx-badge nx-muted">
+                      {displayLabel(s.status)}
+                    </span>
+                  </td>
+                  <td>
+                    <Button
+                      quiet
+                      disabled={busy || s.status === "canceled"}
+                      onClick={() =>
+                        run(
+                          () =>
+                            api(`/subscriptions/${s.id}`, "PATCH", {
+                              status: "canceled",
+                            }),
+                          "Sandbox subscription canceled",
+                        )
+                      }
+                    >
+                      Cancel sandbox
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         {!p.state.subscriptions.length && (
           <Empty text="No sandbox subscriptions." />
         )}
@@ -1782,20 +1860,11 @@ function Approvals({ p }: { p: ModuleProps }) {
 
   return (
     <Shell eyebrow="Review queue" title="Approvals">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div className="nx-notice" style={{ margin: 0, flex: 1 }}>
+      <div className="nx-approval-toolbar">
+        <div className="nx-notice nx-approval-notice">
           Review the exact operation. Page publication executes locally. Send
-          approvals execute real email delivery when configured; local scheduling
-          alone does not send.
+          approvals execute real email delivery when configured; local
+          scheduling alone does not send.
         </div>
         {pendingCount > 0 && (
           <Button
@@ -1808,7 +1877,7 @@ function Approvals({ p }: { p: ModuleProps }) {
             }
           >
             <Check size={15} />
-            Approve all without approval ({pendingCount})
+            Approve all pending actions ({pendingCount})
           </Button>
         )}
       </div>
@@ -1819,7 +1888,7 @@ function Approvals({ p }: { p: ModuleProps }) {
               <span
                 className={`nx-badge ${a.status === "pending" ? "nx-warn" : "nx-muted"}`}
               >
-                {a.status}
+                {displayLabel(a.status)}
               </span>
               <h3>{a.title}</h3>
               <p>{a.summary}</p>
@@ -1866,10 +1935,10 @@ function Approvals({ p }: { p: ModuleProps }) {
             )}
           </article>
         ))}
+        {!p.state.approvals.length && (
+          <Empty text="No review requests yet. New approval requests will appear here with their exact content." />
+        )}
       </div>
-      {!p.state.approvals.length && (
-        <Empty text="No requests yet. Create a workflow or request publication from Website studio." />
-      )}
     </Shell>
   );
 }
@@ -1974,6 +2043,25 @@ function Analytics({ p }: { p: ModuleProps }) {
             Real-time pipeline synchronization across prospect acquisition,
             session attendance, and autonomous specialist actions.
           </p>
+        </div>
+        <div className="nx-deck-summary" aria-label="Dashboard summary">
+          <div className="nx-deck-stat">
+            <span>Pipeline</span>
+            <strong>{contacts.length}</strong>
+            <small>contacts tracked</small>
+          </div>
+          <div className="nx-deck-stat">
+            <span>Live programs</span>
+            <strong>
+              {p.state.webinars.length + p.state.campaigns.length}
+            </strong>
+            <small>events &amp; campaigns</small>
+          </div>
+          <div className="nx-deck-stat">
+            <span>Automation</span>
+            <strong>{agentRuns}</strong>
+            <small>workflow runs logged</small>
+          </div>
         </div>
       </div>
 
@@ -2113,7 +2201,7 @@ function Settings({ p }: { p: ModuleProps }) {
   return (
     <Shell eyebrow="Workspace controls" title="Settings">
       <div className="nx-settings-grid">
-        <div className="nx-panel">
+        <div className="nx-panel nx-settings-card">
           <div className="nx-panel-title">Integrations</div>
           {p.state.integrations.map((i) => (
             <div className="nx-integration" key={i.id}>
@@ -2126,18 +2214,23 @@ function Settings({ p }: { p: ModuleProps }) {
                 </p>
               </div>
               <span className="nx-badge nx-muted">
-                {i.id === "email"
-                  ? emailConfigured === null
-                    ? "checking"
-                    : emailConfigured
-                      ? "configured"
-                      : "needs setup"
-                  : i.status || "unconfigured"}
+                {displayLabel(
+                  i.id === "email"
+                    ? emailConfigured === null
+                      ? "checking"
+                      : emailConfigured
+                        ? "configured"
+                        : "needs setup"
+                    : i.status || "unconfigured",
+                )}
               </span>
             </div>
           ))}
+          {!p.state.integrations.length && (
+            <Empty text="No workspace integrations are configured yet." />
+          )}
         </div>
-        <div className="nx-panel">
+        <div className="nx-panel nx-settings-card">
           <div className="nx-panel-title">Connection guide</div>
           <p className="nx-muted-text">
             Ollama runs locally without an account. For real email, create a
@@ -2175,7 +2268,7 @@ function Settings({ p }: { p: ModuleProps }) {
             deployment.
           </p>
         </div>
-        <div className="nx-panel">
+        <div className="nx-panel nx-settings-card nx-ai-card">
           <div className="nx-panel-title">Local AI status</div>
           <Button
             quiet

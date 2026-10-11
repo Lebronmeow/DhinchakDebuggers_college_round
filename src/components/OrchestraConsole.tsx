@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowUpRight,
   Bot,
@@ -52,17 +59,22 @@ const examples = [
   "Set up a webinar for next month and register the existing interested contacts.",
 ];
 
-const date = (value: string) =>
-  value
-    ? new Date(value).toLocaleString([], {
+const date = (value: string) => {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? "—"
+    : parsed.toLocaleString([], {
         dateStyle: "medium",
         timeStyle: "short",
-      })
-    : "—";
+      });
+};
+const displayLabel = (value: string) =>
+  value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 const statusLabel = (status: RunStatus) =>
-  status === "awaiting_approval"
-    ? "Awaiting approval"
-    : status.replaceAll("_", " ");
+  status === "awaiting_approval" ? "Awaiting approval" : displayLabel(status);
 const isActive = (run?: AgentRun | null) =>
   !!run && ACTIVE.includes(run.status);
 
@@ -97,8 +109,8 @@ function Receipt({ receipt }: { receipt: ToolReceipt }) {
     <article className={`oc-receipt oc-receipt-${receipt.status}`}>
       <div className="oc-receipt-head">
         <ShieldCheck size={15} />
-        <strong>{receipt.tool}</strong>
-        <span>{receipt.status}</span>
+        <strong>{displayLabel(receipt.tool)}</strong>
+        <span>{displayLabel(receipt.status)}</span>
       </div>
       <p>{receipt.message}</p>
       <div className="oc-receipt-meta">
@@ -142,7 +154,7 @@ function MessageThread({
     <div className="oc-thread">
       {messages.length === 0 && (
         <p className="oc-muted">
-          The orchestra will publish model messages here as it works.
+          The orchestra will publish public agent messages here as it works.
         </p>
       )}
       {messages.map((message) => (
@@ -203,6 +215,8 @@ export default function OrchestraConsole({
   selectedAgent,
   compact,
 }: OrchestraConsoleProps) {
+  const consoleId = useId().replace(/:/g, "");
+  const titleId = `${consoleId}-title`;
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -221,7 +235,7 @@ export default function OrchestraConsole({
   const mounted = useRef(true);
   const pollInFlight = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectedRun = runs.find((run) => run.id === selectedId) || runs.at(-1);
+  const selectedRun = runs.find((run) => run.id === selectedId) || runs[0];
 
   const refresh = useCallback(async () => {
     if (pollInFlight.current) return;
@@ -229,16 +243,15 @@ export default function OrchestraConsole({
     try {
       const state = await api<OrchestraResponse>("/orchestra");
       if (!mounted.current) return;
-      setRuns(
-        [...(state.runs || [])].sort((a, b) =>
-          b.createdAt.localeCompare(a.createdAt),
-        ),
+      const nextRuns = [...(state.runs || [])].sort((a, b) =>
+        (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt),
       );
+      setRuns(nextRuns);
       setActiveRunId(state.activeRunId);
       setSelectedId((id) =>
-        id && state.runs.some((run) => run.id === id)
+        id && nextRuns.some((run) => run.id === id)
           ? id
-          : state.runs.at(-1)?.id || null,
+          : nextRuns[0]?.id || null,
       );
     } catch (cause) {
       if (mounted.current)
@@ -279,9 +292,8 @@ export default function OrchestraConsole({
         } else if (openRouterModels.length) {
           setProviderId("openrouter");
           const defaultModel =
-            openRouterModels.find(
-              (m) => m.id === "inclusionai/ling-3.1-flash",
-            )?.id || openRouterModels[0].id;
+            openRouterModels.find((m) => m.id === "inclusionai/ling-3.1-flash")
+              ?.id || openRouterModels[0].id;
           setModel(defaultModel);
         } else if (discovered.length) {
           setProviderId(discovered[0].provider);
@@ -414,11 +426,14 @@ export default function OrchestraConsole({
   );
 
   return (
-    <section className={`orchestra-console ${compact ? "is-compact" : ""}`}>
+    <section
+      className={`orchestra-console ${compact ? "is-compact" : ""}`}
+      aria-labelledby={titleId}
+    >
       <header className="oc-header">
         <div>
           <span className="oc-kicker">Live orchestra</span>
-          <h1>Command console</h1>
+          <h1 id={titleId}>Command console</h1>
           <p>Give the installed local model a real business task.</p>
         </div>
         <div className="oc-model-state">
@@ -430,7 +445,7 @@ export default function OrchestraConsole({
           </span>
         </div>
       </header>
-      <form className="oc-command" onSubmit={submit}>
+      <form className="oc-command" onSubmit={submit} aria-label="New command">
         <label className="oc-model">
           Model
           <select
@@ -480,9 +495,14 @@ export default function OrchestraConsole({
             disabled={busy}
           />
         </label>
-        <div className="oc-employee-models">
+        <div
+          className="oc-employee-models"
+          aria-labelledby={`${consoleId}-employee-models-title`}
+        >
           <div className="oc-employee-models-head">
-            <strong>Employee AI Team (GPU Specialist Assignment)</strong>
+            <strong id={`${consoleId}-employee-models-title`}>
+              Employee model assignments
+            </strong>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               {models.length > 0 && (
                 <button
@@ -496,7 +516,7 @@ export default function OrchestraConsole({
                     setEmployeeModels(localAll);
                   }}
                 >
-                  Use Local GPU for all
+                  Use local model for all
                 </button>
               )}
               <button
@@ -504,7 +524,7 @@ export default function OrchestraConsole({
                 className="oc-btn-ghost"
                 onClick={() => setEmployeeModels(DEFAULT_EMPLOYEE_MODELS)}
               >
-                Reset to defaults
+                Reset assignments
               </button>
             </div>
           </div>
@@ -513,6 +533,7 @@ export default function OrchestraConsole({
               <div key={role} className="oc-employee-card">
                 <span className="oc-employee-role">{role}</span>
                 <select
+                  aria-label={`${role} model`}
                   value={assignedModel}
                   onChange={(e) =>
                     setEmployeeModels((prev) => ({
@@ -539,7 +560,8 @@ export default function OrchestraConsole({
                             : "";
                       return (
                         <option key={`${m.provider}-${m.id}`} value={m.id}>
-                          {prefix}{m.name || m.id}
+                          {prefix}
+                          {m.name || m.id}
                         </option>
                       );
                     })}
@@ -558,7 +580,7 @@ export default function OrchestraConsole({
             onChange={(e) => setAutoApprove(e.target.checked)}
             disabled={busy}
           />
-          <span>Allow all actions without approval (Auto-approve execution)</span>
+          <span>Auto-approve all actions</span>
         </label>
         <button
           className="oc-run"
@@ -591,6 +613,7 @@ export default function OrchestraConsole({
           <div className="oc-examples">
             {examples.map((item) => (
               <button
+                type="button"
                 key={item}
                 onClick={() => setPrompt(item)}
                 disabled={busy}
@@ -609,6 +632,7 @@ export default function OrchestraConsole({
             </div>
             {sortedRuns.map((run) => (
               <button
+                type="button"
                 key={run.id}
                 className={`oc-history-item ${run.id === selectedRun?.id ? "selected" : ""}`}
                 onClick={() => setSelectedId(run.id)}
@@ -622,11 +646,17 @@ export default function OrchestraConsole({
             ))}
           </aside>
           {selectedRun && (
-            <main className="oc-detail">
+            <div
+              className="oc-detail"
+              role="region"
+              aria-labelledby={`${consoleId}-detail-title`}
+            >
               <div className="oc-detail-head">
                 <div>
                   <span className="oc-kicker">Selected command</span>
-                  <h2>{selectedRun.title || selectedRun.prompt}</h2>
+                  <h2 id={`${consoleId}-detail-title`}>
+                    {selectedRun.title || selectedRun.prompt}
+                  </h2>
                   <p>{selectedRun.prompt}</p>
                 </div>
                 <Badge status={selectedRun.status} />
@@ -641,6 +671,7 @@ export default function OrchestraConsole({
                 {isActive(selectedRun) &&
                   selectedRun.status !== "awaiting_approval" && (
                     <button
+                      type="button"
                       onClick={() =>
                         mutate(`/orchestra/runs/${selectedRun.id}/cancel`)
                       }
@@ -652,12 +683,15 @@ export default function OrchestraConsole({
                 {selectedRun.status === "awaiting_approval" && (
                   <>
                     <button
+                      type="button"
                       className="oc-btn-approve-all"
                       onClick={async () => {
                         setBusy(true);
                         try {
                           await api("/approvals/approve-all", "POST", {});
-                          await mutate(`/orchestra/runs/${selectedRun.id}/resume`);
+                          await mutate(
+                            `/orchestra/runs/${selectedRun.id}/resume`,
+                          );
                         } catch (err) {
                           setError((err as Error).message);
                         } finally {
@@ -666,12 +700,13 @@ export default function OrchestraConsole({
                       }}
                       disabled={busy}
                     >
-                      <CheckCheck size={14} /> Allow all without approval (Approve & Resume)
+                      <CheckCheck size={14} /> Approve all &amp; resume
                     </button>
-                    <button onClick={() => onApprovals?.()}>
+                    <button type="button" onClick={() => onApprovals?.()}>
                       <ShieldCheck size={14} /> Review approvals
                     </button>
                     <button
+                      type="button"
                       onClick={() =>
                         mutate(`/orchestra/runs/${selectedRun.id}/resume`)
                       }
@@ -683,6 +718,7 @@ export default function OrchestraConsole({
                 )}
                 {selectedRun.status === "interrupted" && (
                   <button
+                    type="button"
                     onClick={() =>
                       mutate(`/orchestra/runs/${selectedRun.id}/resume`)
                     }
@@ -703,7 +739,10 @@ export default function OrchestraConsole({
                     <p>{task.instruction}</p>
                   </div>
                   {onAgentSelect && (
-                    <button onClick={() => onAgentSelect(task.agent)}>
+                    <button
+                      type="button"
+                      onClick={() => onAgentSelect(task.agent)}
+                    >
                       Focus agent
                     </button>
                   )}
@@ -746,7 +785,7 @@ export default function OrchestraConsole({
                   <p>{selectedRun.summary}</p>
                 </div>
               )}
-            </main>
+            </div>
           )}
         </div>
       )}

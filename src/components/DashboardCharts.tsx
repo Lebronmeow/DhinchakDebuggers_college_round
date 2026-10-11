@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import "./dashboard-charts.css";
 
 export type DashboardChartsProps = {
@@ -62,16 +62,37 @@ export default function DashboardCharts({
   webinarRegistrations = 12,
   emailsSent = 22,
 }: DashboardChartsProps) {
+  const chartId = useId().replace(/:/g, "");
   const [hoverIndex, setHoverIndex] = useState<number | null>(7); // Default to Oct 4
   const [hoveredPieIndex, setHoveredPieIndex] = useState<number | null>(null);
 
   // Pie Chart Slices (Pipeline Breakdown)
   const pieSegments = [
-    { label: "Page Visitors", value: Math.max(pageViews, 33), color: "#50a0ad" },
-    { label: "Active Leads", value: Math.max(leadsCount, 20), color: "#e77761" },
-    { label: "Qualified Prospects", value: Math.max(qualifiedCount, 20), color: "#a37bd0" },
-    { label: "Webinar Registrants", value: Math.max(webinarRegistrations, 12), color: "#d6b954" },
-    { label: "Paying Subscribers", value: Math.max(customersCount, 10), color: "#4cbf72" },
+    {
+      label: "Page Visitors",
+      value: Math.max(pageViews, 33),
+      color: "#50a0ad",
+    },
+    {
+      label: "Active Leads",
+      value: Math.max(leadsCount, 20),
+      color: "#e77761",
+    },
+    {
+      label: "Qualified Prospects",
+      value: Math.max(qualifiedCount, 20),
+      color: "#a37bd0",
+    },
+    {
+      label: "Webinar Registrants",
+      value: Math.max(webinarRegistrations, 12),
+      color: "#d6b954",
+    },
+    {
+      label: "Paying Subscribers",
+      value: Math.max(customersCount, 10),
+      color: "#4cbf72",
+    },
   ];
 
   const totalPieValue = pieSegments.reduce((sum, s) => sum + s.value, 0);
@@ -122,7 +143,8 @@ export default function DashboardCharts({
     };
   });
 
-  const activeSlice = hoveredPieIndex !== null ? pieSlices[hoveredPieIndex] : null;
+  const activeSlice =
+    hoveredPieIndex !== null ? pieSlices[hoveredPieIndex] : null;
 
   // 14-day Telemetry Dimensions
   const chartW = 540;
@@ -159,15 +181,20 @@ export default function DashboardCharts({
   const viewsArea = `${viewsPath} L ${viewsPoints[viewsPoints.length - 1].x} ${padTop + innerH} L ${viewsPoints[0].x} ${padTop + innerH} Z`;
   const leadsArea = `${leadsPath} L ${leadsPoints[leadsPoints.length - 1].x} ${padTop + innerH} L ${leadsPoints[0].x} ${padTop + innerH} Z`;
 
-  const activeIdx = hoverIndex ?? 7;
+  const activeIdx = Math.min(Math.max(hoverIndex ?? 7, 0), DAYS.length - 1);
   const activeX = padLeft + activeIdx * stepX;
   const activeViews = BASE_VIEWS[activeIdx];
   const activeLeads = BASE_LEADS[activeIdx];
   const activeWebinars = BASE_WEBINARS[activeIdx];
 
   // Tooltip positioning (flip if near right edge)
-  const tipX = activeX > chartW - 135 ? activeX - 128 : activeX + 12;
+  const tipX = Math.min(
+    Math.max(activeX > chartW - 135 ? activeX - 128 : activeX + 12, 4),
+    chartW - 126,
+  );
   const tipY = 60;
+  const viewsGradientId = `${chartId}-views-gradient`;
+  const leadsGradientId = `${chartId}-leads-gradient`;
 
   return (
     <div className="nx-dashboard-charts-grid">
@@ -187,6 +214,8 @@ export default function DashboardCharts({
               className="nx-pie-svg"
               viewBox="0 0 220 220"
               preserveAspectRatio="xMidYMid meet"
+              role="group"
+              aria-label="Conversion breakdown donut chart"
             >
               {pieSlices.map((slice) => {
                 const isHovered = hoveredPieIndex === slice.index;
@@ -196,15 +225,30 @@ export default function DashboardCharts({
                     d={slice.pathData}
                     fill={slice.color}
                     className="nx-pie-slice"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${slice.label}: ${slice.value} (${slice.percentage}%)`}
                     style={{
                       transform: isHovered ? "scale(1.04)" : "scale(1)",
                       transformOrigin: `${cx}px ${cy}px`,
-                      filter: isHovered ? "brightness(1.1) drop-shadow(0 2px 6px rgba(0,0,0,0.2))" : "none",
+                      filter: isHovered
+                        ? "brightness(1.1) drop-shadow(0 2px 6px rgba(0,0,0,0.2))"
+                        : "none",
                       transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
                       cursor: "pointer",
                     }}
                     onMouseEnter={() => setHoveredPieIndex(slice.index)}
                     onMouseLeave={() => setHoveredPieIndex(null)}
+                    onFocus={() => setHoveredPieIndex(slice.index)}
+                    onBlur={() => setHoveredPieIndex(null)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setHoveredPieIndex(
+                          hoveredPieIndex === slice.index ? null : slice.index,
+                        );
+                      }
+                    }}
                   >
                     <title>{`${slice.label}: ${slice.value} (${slice.percentage}%)`}</title>
                   </path>
@@ -244,13 +288,33 @@ export default function DashboardCharts({
                 <div
                   key={slice.label}
                   className={`nx-pie-legend-row ${isHovered ? "nx-pie-row-active" : ""}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isHovered}
+                  aria-label={`${slice.label}: ${slice.value} (${slice.percentage}%)`}
                   onMouseEnter={() => setHoveredPieIndex(slice.index)}
                   onMouseLeave={() => setHoveredPieIndex(null)}
+                  onFocus={() => setHoveredPieIndex(slice.index)}
+                  onBlur={() => setHoveredPieIndex(null)}
+                  onClick={() =>
+                    setHoveredPieIndex(
+                      hoveredPieIndex === slice.index ? null : slice.index,
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setHoveredPieIndex(
+                        hoveredPieIndex === slice.index ? null : slice.index,
+                      );
+                    }
+                  }}
                 >
                   <div className="nx-pie-legend-left">
                     <span
                       className="nx-pie-swatch"
                       style={{ background: slice.color }}
+                      aria-hidden="true"
                     />
                     <span className="nx-pie-label">{slice.label}</span>
                   </div>
@@ -272,20 +336,30 @@ export default function DashboardCharts({
             <span className="nx-chart-eyebrow">INTERACTION FLOW</span>
             <h3 className="nx-chart-title">Activity Timeline (14 Days)</h3>
             <p className="nx-chart-sub">
-              Multi-channel touchpoints across traffic, inbound leads, and sessions
+              Multi-channel touchpoints across traffic, inbound leads, and
+              sessions
             </p>
           </div>
           <div className="nx-chart-legend">
             <span className="nx-legend-item">
-              <span className="nx-legend-color" style={{ background: "#365e45" }} />
+              <span
+                className="nx-legend-color"
+                style={{ background: "#365e45" }}
+              />
               Views
             </span>
             <span className="nx-legend-item">
-              <span className="nx-legend-color" style={{ background: "#3c6edb" }} />
+              <span
+                className="nx-legend-color"
+                style={{ background: "#3c6edb" }}
+              />
               Leads
             </span>
             <span className="nx-legend-item">
-              <span className="nx-legend-color" style={{ background: "#f59e0b" }} />
+              <span
+                className="nx-legend-color"
+                style={{ background: "#f59e0b" }}
+              />
               Webinars
             </span>
           </div>
@@ -296,6 +370,8 @@ export default function DashboardCharts({
             className="nx-telemetry-svg"
             viewBox={`0 0 ${chartW} ${chartH}`}
             preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-label="Fourteen day activity timeline for views, leads, and webinar registrations"
             onMouseMove={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               const svgX = ((e.clientX - rect.left) / rect.width) * chartW;
@@ -305,11 +381,11 @@ export default function DashboardCharts({
             onMouseLeave={() => setHoverIndex(7)}
           >
             <defs>
-              <linearGradient id="v2ViewsGrad" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={viewsGradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#365e45" stopOpacity="0.22" />
                 <stop offset="100%" stopColor="#365e45" stopOpacity="0.0" />
               </linearGradient>
-              <linearGradient id="v2LeadsGrad" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={leadsGradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#3c6edb" stopOpacity="0.18" />
                 <stop offset="100%" stopColor="#3c6edb" stopOpacity="0.0" />
               </linearGradient>
@@ -360,8 +436,8 @@ export default function DashboardCharts({
             })}
 
             {/* Area Fills */}
-            <path d={viewsArea} fill="url(#v2ViewsGrad)" />
-            <path d={leadsArea} fill="url(#v2LeadsGrad)" />
+            <path d={viewsArea} fill={`url(#${viewsGradientId})`} />
+            <path d={leadsArea} fill={`url(#${leadsGradientId})`} />
 
             {/* Spline Lines */}
             <path
@@ -421,13 +497,22 @@ export default function DashboardCharts({
                 {DAYS[activeIdx]}
               </text>
               <text x="12" y="37" fontSize="10.5" fill="#4d473e">
-                views : <tspan fontWeight="750" fill="#2b2823">{activeViews}</tspan>
+                Views:{" "}
+                <tspan fontWeight="750" fill="#2b2823">
+                  {activeViews}
+                </tspan>
               </text>
               <text x="12" y="53" fontSize="10.5" fill="#4d473e">
-                leads : <tspan fontWeight="750" fill="#2b2823">{activeLeads}</tspan>
+                Leads:{" "}
+                <tspan fontWeight="750" fill="#2b2823">
+                  {activeLeads}
+                </tspan>
               </text>
               <text x="12" y="69" fontSize="10.5" fill="#4d473e">
-                registrations : <tspan fontWeight="750" fill="#2b2823">{activeWebinars}</tspan>
+                Registrations:{" "}
+                <tspan fontWeight="750" fill="#2b2823">
+                  {activeWebinars}
+                </tspan>
               </text>
             </g>
           </svg>

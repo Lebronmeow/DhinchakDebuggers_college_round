@@ -477,3 +477,401 @@
   color: #8c816f;
 }
 
+/* UI refinement: a calmer command header, stronger chart hierarchy, and
+   responsive chart proportions that remain readable on narrow workspaces. */
+.nx-command-deck {
+  min-height: 164px;
+  padding: 24px 26px;
+  border-radius: 14px;
+  background: linear-gradient(120deg, #faf7ee 0%, #f5f1e6 100%);
+  border-color: #ded5c4;
+  box-shadow: 0 8px 24px rgba(70, 60, 45, 0.055);
+}
+
+.nx-deck-brand {
+  min-width: 0;
+}
+
+.nx-deck-brand h2 {
+  font-size: clamp(21px, 2.4vw, 27px);
+  line-height: 1.15;
+}
+
+.nx-deck-brand p {
+  max-width: 600px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.nx-deck-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(112px, 1fr));
+  gap: 9px;
+  flex: 0 0 min(390px, 42%);
+}
+
+.nx-deck-stat {
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #e4dbc9;
+  border-radius: 9px;
+  background: rgba(255, 252, 245, 0.86);
+}
+
+.nx-deck-stat span,
+.nx-deck-stat small {
+  display: block;
+  color: #8c816f;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.nx-deck-stat strong {
+  display: block;
+  margin: 8px 0 3px;
+  color: #29251f;
+  font-size: 23px;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.nx-station-grid {
+  grid-template-columns: repeat(3, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 26px;
+}
+
+.nx-station-card {
+  min-height: 150px;
+  padding: 17px 19px;
+  border-radius: 12px;
+}
+
+.nx-station-header {
+  margin-bottom: 15px;
+}
+
+.nx-station-channel {
+  font-size: 10px;
+}
+
+.nx-station-figure {
+  font-size: clamp(25px, 2.6vw, 31px);
+}
+
+.nx-station-title {
+  font-size: 14px;
+}
+
+.nx-station-footer {
+  margin-top: auto;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.nx-dashboard-charts-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  margin-bottom: 26px;
+}
+
+.nx-chart-card {
+  min-width: 0;
+  min-height: 382px;
+  padding: 24px 25px;
+  border-radius: 14px;
+  box-shadow: 0 8px 22px rgba(70, 60, 45, 0.045);
+}
+
+.nx-chart-header,
+.nx-chart-header-row {
+  margin-bottom: 20px;
+}
+
+.nx-chart-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.nx-chart-title {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.nx-chart-sub {
+  max-width: 480px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.nx-chart-legend {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+
+.nx-legend-item {
+  font-size: 12px;
+}
+
+.nx-legend-color {
+  width: 10px;
+  height: 10px;
+}
+
+.nx-pie-container {
+  gap: 24px;
+  padding: 8px 0 2px;
+}
+
+.nx-pie-visual {
+  width: clamp(190px, 42%, 230px);
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.nx-pie-legend {
+  gap: 9px;
+  min-width: 0;
+}
+
+.nx-pie-legend-row {
+  min-height: 36px;
+  padding: 7px 11px;
+}
+
+.nx-pie-label {
+  font-size: 12px;
+}
+
+.nx-pie-val {
+  font-size: 13px;
+}
+
+.nx-pie-pct {
+  font-size: 11px;
+}
+
+.nx-telemetry-container {
+  min-height: 250px;
+}
+
+.nx-telemetry-svg {
+  max-height: 300px;
+}
+
+@media (max-width: 1180px) {
+  .nx-command-deck {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nx-deck-summary {
+    flex-basis: auto;
+    width: min(100%, 520px);
+  }
+}
+
+@media (max-width: 1024px) {
+  .nx-dashboard-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-chart-card {
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 720px) {
+  .nx-station-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-pie-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nx-pie-visual {
+    width: min(220px, 64vw);
+    align-self: center;
+  }
+
+  .nx-pie-legend {
+    width: 100%;
+  }
+
+  .nx-chart-header-row {
+    flex-direction: column;
+  }
+
+  .nx-chart-legend {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .nx-command-deck {
+    padding: 20px 18px;
+  }
+
+  .nx-deck-summary {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .nx-deck-stat {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    column-gap: 10px;
+  }
+
+  .nx-deck-stat strong {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+
+  .nx-deck-stat small {
+    grid-column: 1;
+  }
+
+  .nx-station-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .nx-station-card {
+    min-height: 132px;
+  }
+
+  .nx-chart-card {
+    min-height: 0;
+    padding: 20px 16px;
+  }
+
+  .nx-chart-title {
+    font-size: 18px;
+  }
+
+  .nx-telemetry-container {
+    min-height: 205px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nx-deck-lamp {
+    animation: none;
+  }
+
+  .nx-station-card,
+  .nx-pie-legend-row {
+    transition: none;
+  }
+}
+
+/* Keep dashboard composition substantial without making the charts a tall
+   empty rail on wide screens or smaller laptops. */
+.nx-command-deck {
+  min-height: 0;
+  padding: 20px 22px;
+  margin-bottom: 18px;
+}
+
+.nx-station-grid {
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.nx-station-card {
+  min-height: 0;
+  padding: 15px 17px;
+}
+
+.nx-dashboard-charts-grid {
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.nx-chart-card {
+  min-height: 330px;
+  padding: 20px 22px;
+}
+
+.nx-chart-header,
+.nx-chart-header-row {
+  margin-bottom: 14px;
+}
+
+.nx-telemetry-container {
+  min-height: 210px;
+}
+
+@media (max-width: 1024px) {
+  .nx-dashboard-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-chart-card {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 720px) {
+  .nx-station-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-pie-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nx-pie-visual {
+    width: min(220px, 64vw);
+    align-self: center;
+  }
+
+  .nx-pie-legend {
+    width: 100%;
+  }
+
+  .nx-chart-header-row {
+    flex-direction: column;
+  }
+
+  .nx-chart-legend {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .nx-command-deck {
+    padding: 18px 16px;
+  }
+
+  .nx-deck-summary {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .nx-station-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .nx-station-card {
+    min-height: 0;
+  }
+
+  .nx-chart-card {
+    min-height: 0;
+    padding: 18px 15px;
+  }
+
+  .nx-telemetry-container {
+    min-height: 190px;
+  }
+}
+

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -221,10 +222,12 @@ function Room({
   agent,
   index,
   message,
+  idPrefix,
 }: {
   agent: Agent;
   index: number;
   message?: string;
+  idPrefix: string;
 }) {
   const x = 20 + (index % 3) * 495,
     y = index < 3 ? 210 : 455;
@@ -313,6 +316,9 @@ function Room({
       <path d={`M${x + 250} ${y + 220}h50`} stroke="#f3e4c4" strokeWidth="10" />
       {message && (
         <g>
+          <clipPath id={`${idPrefix}-bubble-clip-${index}`}>
+            <rect x={x + 134} y={y + 68} width="224" height="26" />
+          </clipPath>
           <rect
             x={x + 125}
             y={y + 65}
@@ -328,8 +334,13 @@ function Room({
             stroke="#49353a"
             strokeWidth="3"
           />
-          <text x={x + 138} y={y + 86} className="bubble-text">
-            {truncate(message)}
+          <text
+            x={x + 138}
+            y={y + 86}
+            className="bubble-text"
+            clipPath={`url(#${idPrefix}-bubble-clip-${index})`}
+          >
+            {truncate(message, 35)}
           </text>
         </g>
       )}
@@ -343,6 +354,10 @@ export default function PixelOffice({
   onAgentSelect,
   compact = false,
 }: PixelOfficeProps) {
+  const svgId = useId().replace(/:/g, "");
+  const floorPatternId = `${svgId}-floor`;
+  const loungeFloorPatternId = `${svgId}-lounge-floor`;
+  const officeTitleId = `${svgId}-title`;
   const [selected, setSelected] = useState<AgentRole | null>(null);
   const newest = useMemo(
     () =>
@@ -546,12 +561,12 @@ export default function PixelOffice({
   return (
     <section
       className={`pixel-office ${compact ? "pixel-office--compact" : ""}`}
-      aria-label="Nexus pixel office"
+      aria-labelledby={officeTitleId}
     >
       <header className="pixel-office__header">
         <div>
           <p className="pixel-office__eyebrow">NEXUS HQ · LIVE ORCHESTRA</p>
-          <h2>The team behind your workflows</h2>
+          <h2 id={officeTitleId}>The team behind your workflows</h2>
         </div>
         <div className="pixel-office__legend">
           <span>
@@ -564,7 +579,7 @@ export default function PixelOffice({
           </span>
           <span>
             <i className="status-dot status-dot--approval" />
-            Approval
+            Needs approval
           </span>
         </div>
       </header>
@@ -578,7 +593,7 @@ export default function PixelOffice({
           >
             <defs>
               <pattern
-                id="floor"
+                id={floorPatternId}
                 width="36"
                 height="36"
                 patternUnits="userSpaceOnUse"
@@ -587,7 +602,7 @@ export default function PixelOffice({
                 <rect width="18" height="18" fill="#48464b" />
               </pattern>
               <pattern
-                id="lounge-floor"
+                id={loungeFloorPatternId}
                 width="36"
                 height="36"
                 patternUnits="userSpaceOnUse"
@@ -611,7 +626,7 @@ export default function PixelOffice({
               y="28"
               width="1444"
               height="147"
-              fill="url(#floor)"
+              fill={`url(#${floorPatternId})`}
               stroke="#332a33"
               strokeWidth="7"
             />
@@ -692,7 +707,13 @@ export default function PixelOffice({
             </text>
             <path d="M325 175h50" stroke="#f3e4c4" strokeWidth="10" />
             {rooms.map((a, i) => (
-              <Room key={a.name} agent={a} index={i} message={message(a)} />
+              <Room
+                key={a.name}
+                agent={a}
+                index={i}
+                message={message(a)}
+                idPrefix={svgId}
+              />
             ))}
             <rect
               x="28"
@@ -720,7 +741,7 @@ export default function PixelOffice({
               y="710"
               width="1444"
               height="162"
-              fill="url(#lounge-floor)"
+              fill={`url(#${loungeFloorPatternId})`}
               stroke="#332a33"
               strokeWidth="7"
             />
@@ -848,7 +869,11 @@ export default function PixelOffice({
               );
             })}
           </svg>
-          <div className="pixel-office__agents" aria-label="Office agents">
+          <div
+            className="pixel-office__agents"
+            role="group"
+            aria-label="Office agents"
+          >
             {AGENTS.map((a) => {
               const s = state(a);
               const plan = plans.find((item) => item.role === a.name)!;

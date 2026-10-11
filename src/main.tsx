@@ -115,22 +115,33 @@ function App() {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, []);
-  const active = runs.find((run) =>
-    ["planning", "running"].includes(run.status),
-  );
+  const active = [...runs]
+    .filter((run) => ["planning", "running"].includes(run.status))
+    .sort((a, b) =>
+      (b.updatedAt || b.createdAt).localeCompare(a.updatedAt || a.createdAt),
+    )[0];
   const pending =
     state?.approvals.filter((a) => a.status === "pending").length || 0;
   return (
     <div className="world-shell">
       {mobile && (
         <button
+          type="button"
           className="world-backdrop"
           onClick={() => setMobile(false)}
           aria-label="Close navigation"
         />
       )}
-      <aside className={`world-sidebar ${mobile ? "is-open" : ""}`}>
-        <button className="world-brand" onClick={() => navigate("office")}>
+      <aside
+        id="workspace-navigation"
+        className={`world-sidebar ${mobile ? "is-open" : ""}`}
+      >
+        <button
+          type="button"
+          className="world-brand"
+          onClick={() => navigate("office")}
+          aria-label="Open Agent Studio"
+        >
           <NexusLogo size="medium" />
           <small className="world-brand-sub">AI Business Orchestra</small>
         </button>
@@ -138,7 +149,9 @@ function App() {
           {nav.map(({ view: target, label, icon: Icon, tag }) => (
             <button
               key={target}
+              type="button"
               className={view === target ? "is-active" : ""}
+              aria-current={view === target ? "page" : undefined}
               onClick={() => navigate(target)}
             >
               <Icon size={19} />
@@ -157,6 +170,7 @@ function App() {
             return (
               <button
                 key={role}
+                type="button"
                 onClick={() => {
                   navigate("office");
                   setSelectedAgent(role);
@@ -165,7 +179,7 @@ function App() {
               >
                 <span className={`department-light ${task ? "working" : ""}`} />
                 <span>{role}</span>
-                <small>{task ? "1 working" : "ready"}</small>
+                <small>{task ? "Working" : "Ready"}</small>
               </button>
             );
           })}
@@ -181,8 +195,11 @@ function App() {
           <div className="world-title">
             <button
               className="world-mobile-menu"
+              type="button"
               onClick={() => setMobile(true)}
               aria-label="Open menu"
+              aria-expanded={mobile}
+              aria-controls="workspace-navigation"
             >
               <Menu size={20} />
             </button>
@@ -194,16 +211,22 @@ function App() {
             </span>
           </div>
           <div className="world-top-actions">
-            <button className="world-command-button" onClick={command}>
+            <button
+              className="world-command-button"
+              type="button"
+              onClick={command}
+              aria-label="Open command desk"
+            >
               <Terminal size={16} />
-              Command desk
+              <span>Command desk</span>
             </button>
-            <button onClick={() => navigate("approvals")}>
+            <button type="button" onClick={() => navigate("approvals")}>
               <ShieldCheck size={16} />
               Decisions{pending > 0 && <b>{pending}</b>}
             </button>
             <button
               className="world-live-room-btn"
+              type="button"
               onClick={() => {
                 const liveUrl =
                   state?.webinars?.find((w) => w.joinUrl)?.joinUrl ||
@@ -217,6 +240,7 @@ function App() {
             </button>
             <button
               className="icon-only"
+              type="button"
               onClick={() => void refresh()}
               aria-label="Refresh workspace"
             >
@@ -226,7 +250,10 @@ function App() {
         </header>
         {error && (
           <div className="world-error" role="alert">
-            {error} <button onClick={() => void refresh()}>Reconnect</button>
+            {error}{" "}
+            <button type="button" onClick={() => void refresh()}>
+              Reconnect
+            </button>
           </div>
         )}
         {!state ? (
@@ -265,7 +292,7 @@ function App() {
                   <h2>Command & collaboration</h2>
                   <span>Ollama · local execution</span>
                 </div>
-                <button onClick={() => setSelectedAgent(null)}>
+                <button type="button" onClick={() => setSelectedAgent(null)}>
                   All agents <ChevronRight size={14} />
                 </button>
               </div>
@@ -280,6 +307,7 @@ function App() {
               {!consoleOpen && (
                 <button
                   className="world-show-console"
+                  type="button"
                   onClick={() => setConsoleOpen(true)}
                 >
                   Open command desk to give the team a job{" "}
@@ -294,7 +322,7 @@ function App() {
                 simulated conversations. Email requires a configured provider
                 and approval; payments remain explicitly sandbox-only.
               </p>
-              <button onClick={() => navigate("settings")}>
+              <button type="button" onClick={() => navigate("settings")}>
                 Connections <ChevronRight size={14} />
               </button>
             </div>
@@ -326,7 +354,11 @@ function App() {
           role={toast.error ? "alert" : "status"}
         >
           {toast.text}
-          <button aria-label="Dismiss" onClick={() => setToast(null)}>
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={() => setToast(null)}
+          >
             <X size={15} />
           </button>
         </div>

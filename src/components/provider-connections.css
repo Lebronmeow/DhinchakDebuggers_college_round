@@ -511,3 +511,444 @@
     transition: none;
   }
 }
+
+/* UI refinement: make provider setup feel like a guided workspace rather than
+   a dense catalog, while keeping every state and control in the same flow. */
+.provider-connections {
+  --pc-soft: #f5f3ed;
+  --pc-soft-green: #edf4ea;
+  color: var(--pc-ink);
+  font-size: 15px;
+}
+
+.provider-connections.pc-overlay {
+  padding: clamp(12px, 3vw, 30px);
+  background: #20261dcc;
+}
+
+.provider-connections .pc-dialog {
+  width: min(1040px, 100%);
+  border-radius: 20px;
+  box-shadow: 0 24px 90px #141e2340;
+}
+
+.provider-connections .pc-header {
+  padding: 30px clamp(22px, 4vw, 36px) 23px;
+  background: linear-gradient(125deg, #fffdf8 0%, #f7f4ec 100%);
+}
+
+.provider-connections .pc-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+}
+
+.provider-connections h2 {
+  margin: 7px 0 6px;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.08;
+}
+
+.provider-connections .pc-header p,
+.provider-connections .pc-section-heading p,
+.provider-connections .pc-muted {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.provider-connections .pc-body {
+  padding: 26px clamp(22px, 4vw, 36px) 34px;
+}
+
+.provider-connections .pc-search {
+  min-height: 46px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: var(--pc-soft);
+}
+
+.provider-connections .pc-search input {
+  font-size: 14px;
+}
+
+.provider-connections .pc-status-bar {
+  min-height: 38px;
+  margin: 9px 0 24px;
+  font-size: 12px;
+}
+
+.provider-connections .pc-status-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-connections .pc-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #a9afa3;
+}
+
+.provider-connections .pc-status-dot.is-loading {
+  background: #d6a65e;
+  box-shadow: 0 0 0 4px #d6a65e2b;
+}
+
+.provider-connections .pc-status-dot.is-ready {
+  background: #5b9a62;
+  box-shadow: 0 0 0 4px #5b9a6228;
+}
+
+.provider-connections .pc-status-dot.is-offline {
+  background: #bb7256;
+  box-shadow: 0 0 0 4px #bb725626;
+}
+
+.provider-connections .pc-status-bar button,
+.provider-connections .pc-section-heading > button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.provider-connections .pc-alert,
+.provider-connections .pc-notice {
+  padding: 13px 15px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.provider-connections .pc-section {
+  margin-top: 30px;
+}
+
+.provider-connections .pc-section-heading {
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.provider-connections .pc-section-heading > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.provider-connections h3 {
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.provider-connections .pc-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.provider-connections .pc-card {
+  min-height: 146px;
+  padding: 17px 15px;
+  border-radius: 12px;
+  background: #fffefa;
+  box-shadow: 0 2px 7px rgba(64, 79, 63, 0.025);
+}
+
+.provider-connections .pc-card:hover,
+.provider-connections .pc-card.is-selected {
+  border-color: #6d9276;
+  background: #f0f6ed;
+  box-shadow: 0 4px 12px rgba(64, 99, 75, 0.08);
+}
+
+.provider-connections .pc-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  font-size: 20px;
+}
+
+.provider-connections .pc-card-copy {
+  gap: 6px;
+}
+
+.provider-connections .pc-card-copy strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.provider-connections .pc-card-copy > span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.provider-connections .pc-card-copy small {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.provider-connections .pc-card > svg {
+  margin-top: 10px;
+}
+
+.provider-connections .pc-setup {
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f4f6ef 0%, #f8f6ef 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.provider-connections .pc-setup-heading {
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.provider-connections .pc-form {
+  gap: 15px;
+}
+
+.provider-connections .pc-form label,
+.provider-connections .pc-worker-form label,
+.provider-connections .pc-route {
+  gap: 7px;
+  font-size: 13px;
+}
+
+.provider-connections .pc-form input,
+.provider-connections .pc-worker-form input,
+.provider-connections select {
+  min-height: 43px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.provider-connections .pc-form p {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.provider-connections .pc-warning {
+  padding: 11px 12px;
+  border: 1px solid #d6e0d0;
+  border-radius: 8px;
+  background: var(--pc-soft-green);
+  line-height: 1.5;
+}
+
+.provider-connections .pc-primary {
+  min-height: 41px;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 3px 8px rgba(64, 99, 75, 0.12);
+}
+
+.provider-connections .pc-discovery {
+  padding-top: 24px;
+}
+
+.provider-connections .pc-model-filters {
+  gap: 14px;
+  margin-top: 15px;
+}
+
+.provider-connections .pc-checkbox {
+  min-height: 38px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.provider-connections .pc-model-list,
+.provider-connections .pc-worker-list {
+  margin: 15px 0;
+  border-radius: 10px;
+  max-height: 320px;
+}
+
+.provider-connections .pc-model-list li,
+.provider-connections .pc-worker-list li {
+  gap: 14px;
+  padding: 13px 14px;
+  font-size: 13px;
+}
+
+.provider-connections .pc-model-list li > span {
+  max-width: 48%;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.provider-connections .pc-model-list code,
+.provider-connections .pc-worker-list span {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.provider-connections .pc-empty {
+  padding: 16px;
+  border: 1px dashed #d1d5ca;
+  background: #f5f5ef;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.provider-connections .pc-route {
+  margin: 16px 0;
+}
+
+.provider-connections .pc-worker-guide {
+  margin-top: 30px;
+  padding: 21px;
+  border-radius: 12px;
+}
+
+.provider-connections .pc-worker-guide ol {
+  margin: 12px 0 18px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.provider-connections .pc-worker-guide li {
+  padding: 4px 0;
+}
+
+.provider-connections .pc-worker-form {
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.provider-connections .pc-footer {
+  min-height: 60px;
+  padding: 15px clamp(22px, 4vw, 36px);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.provider-connections .pc-footer button {
+  min-height: 36px;
+  padding: 8px 18px;
+}
+
+@media (max-width: 800px) {
+  .provider-connections .pc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .provider-connections .pc-header,
+  .provider-connections .pc-body,
+  .provider-connections .pc-footer {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+}
+
+@media (max-width: 540px) {
+  .provider-connections.pc-overlay {
+    padding: 6px;
+  }
+
+  .provider-connections .pc-dialog {
+    max-height: calc(100dvh - 12px);
+    border-radius: 14px;
+  }
+
+  .provider-connections .pc-header {
+    padding: 22px 17px 18px;
+  }
+
+  .provider-connections .pc-body {
+    padding: 19px 17px 24px;
+  }
+
+  .provider-connections .pc-footer {
+    padding: 13px 17px;
+  }
+
+  .provider-connections .pc-grid,
+  .provider-connections .pc-worker-form {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-connections .pc-card {
+    min-height: 116px;
+  }
+
+  .provider-connections .pc-section-heading > button {
+    width: calc(100% - 32px);
+    margin-left: 32px;
+  }
+
+  .provider-connections .pc-model-filters {
+    align-items: stretch;
+  }
+
+  .provider-connections .pc-checkbox {
+    min-height: 42px;
+  }
+}
+
+/* Use a wider desktop dialog while keeping the provider catalog compact and
+   the setup controls aligned with the rest of the workspace. */
+.provider-connections .pc-dialog {
+  width: min(1280px, 100%);
+}
+
+.provider-connections .pc-section {
+  margin-top: 24px;
+}
+
+.provider-connections .pc-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.provider-connections .pc-card {
+  min-height: 128px;
+  padding: 15px 14px;
+}
+
+.provider-connections .pc-setup {
+  margin-top: 20px;
+  padding: 18px;
+}
+
+.provider-connections .pc-model-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.provider-connections .pc-model-filters .pc-search {
+  width: 100%;
+  min-width: 0;
+}
+
+.provider-connections .pc-worker-guide {
+  margin-top: 24px;
+  padding: 18px;
+}
+
+@media (max-width: 800px) {
+  .provider-connections .pc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .provider-connections .pc-grid,
+  .provider-connections .pc-worker-form {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-connections .pc-card {
+    min-height: 116px;
+  }
+
+  .provider-connections .pc-model-filters {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}

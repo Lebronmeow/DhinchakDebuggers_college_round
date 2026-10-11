@@ -163,6 +163,10 @@ const categories: { id: Category; title: string; description: string }[] = [
   },
 ];
 const empty: Snapshot = { providers: [], workers: [], models: [] };
+const displayLabel = (value: string) =>
+  value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 
 // Same-origin only. Never display server error bodies: they may contain credentials.
 async function request(
@@ -638,6 +642,7 @@ export default function ProviderConnections({
           </div>
           {onClose && (
             <button
+              type="button"
               className="pc-icon-button"
               onClick={onClose}
               aria-label="Close provider connections"
@@ -657,15 +662,23 @@ export default function ProviderConnections({
               aria-label="Search providers and connections"
             />
           </label>
-          <div className="pc-status-bar">
-            <span>
+          <div className="pc-status-bar" role="status" aria-live="polite">
+            <span className="pc-status-copy">
+              <span
+                className={`pc-status-dot ${loading ? "is-loading" : available ? "is-ready" : "is-offline"}`}
+                aria-hidden="true"
+              />
               {loading
                 ? "Checking backend…"
                 : available
                   ? "Backend status loaded"
                   : "Connections unavailable"}
             </span>
-            <button disabled={loading || busy} onClick={() => void refresh()}>
+            <button
+              type="button"
+              disabled={loading || busy}
+              onClick={() => void refresh()}
+            >
               <RefreshCw size={14} /> Refresh status
             </button>
           </div>
@@ -717,9 +730,14 @@ export default function ProviderConnections({
                     return (
                       <button
                         key={provider.id}
+                        type="button"
                         className={`pc-card ${selected?.id === provider.id ? "is-selected" : ""}`}
                         aria-expanded={selected?.id === provider.id}
-                        aria-controls={`${id}-form`}
+                        aria-controls={
+                          selected?.id === provider.id
+                            ? `${id}-form`
+                            : undefined
+                        }
                         disabled={busy}
                         onClick={() => {
                           setSelected(
@@ -745,7 +763,7 @@ export default function ProviderConnections({
                             }
                           >
                             {connection
-                              ? connection.status
+                              ? displayLabel(connection.status)
                               : available
                                 ? "Not connected"
                                 : "Status unavailable"}
@@ -773,6 +791,7 @@ export default function ProviderConnections({
               <div className="pc-setup-heading">
                 <span>CONNECTION SETUP</span>
                 <button
+                  type="button"
                   className="pc-icon-button"
                   aria-label="Close connection setup"
                   disabled={busy}
@@ -802,7 +821,11 @@ export default function ProviderConnections({
                   connect a provider.
                 </p>
               </div>
-              <button onClick={() => void discover()} disabled={catalogBusy}>
+              <button
+                type="button"
+                onClick={() => void discover()}
+                disabled={catalogBusy}
+              >
                 {catalogBusy ? (
                   <Loader2 size={14} className="pc-spin" />
                 ) : (
@@ -905,7 +928,7 @@ export default function ProviderConnections({
                             worker.status === "online" ? "pc-connected" : ""
                           }
                         >
-                          {worker.status}
+                          {displayLabel(worker.status)}
                         </small>
                       </li>
                     ))}
@@ -1026,7 +1049,11 @@ export default function ProviderConnections({
             Secrets stay server-side. Model messages are not proof of a
             connected service.
           </span>
-          {onClose && <button onClick={onClose}>Done</button>}
+          {onClose && (
+            <button type="button" onClick={onClose}>
+              Done
+            </button>
+          )}
         </footer>
       </section>
     </div>
