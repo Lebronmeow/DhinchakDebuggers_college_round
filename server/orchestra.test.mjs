@@ -295,3 +295,33 @@ test("queued cancellation does not call the model", async () => {
     await server.close();
   }
 });
+
+test("delete run removes it from history", async () => {
+  const f = fixture([]);
+  f.ollamaFetch = async (url) => {
+    if (String(url).endsWith("/api/tags"))
+      return new Response(JSON.stringify({ models: [{ name: "qwen" }] }));
+    return new Response(JSON.stringify({ message: { content: "{}" } }));
+  };
+  const server = await start(f);
+  try {
+    const created = await (
+      await fetch(`${server.base}/api/orchestra/runs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "delete test", model: "qwen" }),
+      })
+    ).json();
+    const res = await fetch(`${server.base}/api/orchestra/runs/${created.id}`, {
+      method: "DELETE",
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.success, true);
+    const state = await (await fetch(`${server.base}/api/orchestra`)).json();
+    assert.equal(state.runs.some((r) => r.id === created.id), false);
+  } finally {
+    await server.close();
+  }
+});
+

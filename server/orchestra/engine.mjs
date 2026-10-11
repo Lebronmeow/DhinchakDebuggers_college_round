@@ -257,19 +257,51 @@ export function createOrchestraEngine({
         run.agentProviders?.[task.agent] || run.providerId || "ollama";
       task.model = specModel;
       task.provider = specProvider;
-      const result = await ask(specProvider, {
-        model: specModel,
-        system: specialistSystem(task.agent, catalog),
-        user: JSON.stringify({
-          goal: run.prompt,
-          instruction: task.instruction,
-          publicMessages: run.messages.slice(-8),
-          receipts,
-          context: focusedContext,
-        }),
-        schema: specialistSchema(catalog),
-        signal,
-      });
+      let result;
+      try {
+        result = await ask(specProvider, {
+          model: specModel,
+          system: specialistSystem(task.agent, catalog),
+          user: JSON.stringify({
+            goal: run.prompt,
+            instruction: task.instruction,
+            publicMessages: run.messages.slice(-8),
+            receipts,
+            context: focusedContext,
+          }),
+          schema: specialistSchema(catalog),
+          signal,
+        });
+      } catch (err) {
+        if (signal.aborted || /canceled/i.test(err.message)) throw err;
+        if (specProvider !== run.providerId || specModel !== run.model) {
+          message(
+            run,
+            "system",
+            task.agent,
+            `${task.agent} specialist encountered an issue on ${specModel} (${err.message}). Falling back to primary ${run.model} on ${run.providerId}.`,
+            "system",
+          );
+          await persist(run);
+          task.model = run.model;
+          task.provider = run.providerId;
+          result = await ask(run.providerId, {
+            model: run.model,
+            system: specialistSystem(task.agent, catalog),
+            user: JSON.stringify({
+              goal: run.prompt,
+              instruction: task.instruction,
+              publicMessages: run.messages.slice(-8),
+              receipts,
+              context: focusedContext,
+            }),
+            schema: specialistSchema(catalog),
+            signal,
+          });
+        } else {
+          throw err;
+        }
+      }
       if (signal.aborted) throw new Error("orchestra canceled");
       if (
         typeof result.message !== "string" ||
@@ -312,8 +344,17 @@ export function createOrchestraEngine({
         continue;
       }
       const definition = catalog.find((tool) => tool.name === result.tool);
-      if (!definition)
-        throw new Error(`${task.agent} selected a disallowed tool`);
+      if (!definition) {
+        message(
+          run,
+          "system",
+          task.agent,
+          `The tool '${result.tool}' is not recognized for ${task.agent}. Available tools: ${catalog.map((t) => t.name).join(", ")}. Please call a valid tool.`,
+          "system",
+        );
+        await persist(run);
+        continue;
+      }
       const prior = run.receipts.find(
         (receipt) =>
           receipt.taskId === task.id &&
@@ -352,11 +393,20 @@ export function createOrchestraEngine({
           await persist(run);
           return;
         }
+        const domainToolSuggestion =
+          {
+            Website: "call create_page with title, headline, and description",
+            Growth: "call send_email with to, subject, and body (or create_campaign)",
+            Events: "call create_webinar with title and description",
+            CRM: "call create_contact with name and email",
+            Billing: "call create_sandbox_subscription with planId and contactEmail",
+          }[task.agent] || "call your delegated tool";
+
         message(
           run,
           "system",
           task.agent,
-          `This exact ${result.tool} action already succeeded (${prior.recordId || prior.message}). Do not repeat it. Use its existing ID for the next step, or finish with tool:"",args:{},done:true if your delegated task is fulfilled.`,
+          `This exact ${result.tool} action already succeeded (${prior.recordId || prior.message}). Do not repeat ${result.tool}. Your delegated action is satisfied; finish now with {"message": "Done", "tool": "", "args": {}, "done": true}.`,
           "system",
         );
         await persist(run);
@@ -419,11 +469,11 @@ export function createOrchestraEngine({
         /^create_(webinar|contact|sandbox_subscription|page|campaign)$/.test(
           result.tool,
         ) &&
-        !/(then|after|next|link|register|configure|publish|update|verify|review|send|schedule)/.test(
+        !/(then|after|next|link|register|configure|publish|update|verify|review|send|schedule|email)/.test(
           instruction,
         );
 
-      if (standaloneCreate) {
+      if (result.tool === "send_email" || standaloneCreate) {
         task.status = "completed";
         task.summary = `${saved.message} Task completed from the verified receipt.`;
         await persist(run);
@@ -493,6 +543,23 @@ export function createOrchestraEngine({
       run.error = "Canceled by operator";
       await persist(run);
       return run;
+    },
+    async delete(id) {
+      controllers.get(id)?.abort();
+      controllers.delete(id);
+      runtimes.delete(id);
+      let deleted = false;
+      await store.update((state) => {
+        state.orchestraRuns ||= [];
+        const beforeLen = state.orchestraRuns.length;
+        state.orchestraRuns = state.orchestraRuns.filter(
+          (run) => run.id !== id,
+        );
+        if (state.orchestraRuns.length < beforeLen) {
+          deleted = true;
+        }
+      });
+      return deleted;
     },
     async resume(id, port) {
       const source = readRuns().find((run) => run.id === id);

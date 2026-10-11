@@ -148,20 +148,19 @@ export function cleanJSON(raw) {
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fence) {
     s = fence[1].trim();
-  } else {
-    const startObj = s.indexOf("{");
-    const endObj = s.lastIndexOf("}");
-    const startArr = s.indexOf("[");
-    const endArr = s.lastIndexOf("]");
-    if (
-      startObj !== -1 &&
-      endObj > startObj &&
-      (startArr === -1 || startObj < startArr)
-    ) {
-      s = s.slice(startObj, endObj + 1);
-    } else if (startArr !== -1 && endArr > startArr) {
-      s = s.slice(startArr, endArr + 1);
-    }
+  }
+  const startObj = s.indexOf("{");
+  const endObj = s.lastIndexOf("}");
+  const startArr = s.indexOf("[");
+  const endArr = s.lastIndexOf("]");
+  if (
+    startObj !== -1 &&
+    endObj > startObj &&
+    (startArr === -1 || startObj < startArr)
+  ) {
+    s = s.slice(startObj, endObj + 1);
+  } else if (startArr !== -1 && endArr > startArr) {
+    s = s.slice(startArr, endArr + 1);
   }
   return s;
 }
@@ -251,6 +250,18 @@ export function createProviderService({
   const bases = rawBases.map(safeBase).filter(Boolean);
   const base = bases[0] || null;
   const modelEndpointMap = new Map();
+  const cachedRemoteModels = new Map();
+  if (bases.length > 0) {
+    cachedRemoteModels.set("qwen3:4b", {
+      id: "qwen3:4b",
+      name: "qwen3:4b (Friend 3 GPU)",
+      free: true,
+      freeSource: "zero-priced",
+    });
+    if (bases[bases.length - 1]) {
+      modelEndpointMap.set("qwen3:4b", bases[bases.length - 1]);
+    }
+  }
   const configs = {
     ollama: { base: OLLAMA, configured: true, key: "" },
     openrouter: {
@@ -291,9 +302,8 @@ export function createProviderService({
     // OpenRouter's public catalog needs no inference key; discovery stays useful before setup.
     const c = id === "openrouter" ? configs.openrouter : config(id);
     if (id === "openai-compatible" && bases.length > 1) {
-      const allItems = [];
-      for (const endpointBase of bases) {
-        try {
+      const results = await Promise.allSettled(
+        bases.map(async (endpointBase) => {
           const modelUrl = !endpointBase.endsWith("/v1")
             ? `${endpointBase}/v1/models`
             : `${endpointBase}/models`;
@@ -301,18 +311,29 @@ export function createProviderService({
             providerFetch,
             modelUrl,
             { headers: headers(c) },
-            { signal, maxBytes: 8 * 1024 * 1024 },
+            { signal, timeoutMs: 3000, maxBytes: 8 * 1024 * 1024 },
           );
-          if (Array.isArray(data?.data)) {
-            for (const item of data.data) {
-              if (item?.id) {
-                modelEndpointMap.set(item.id, endpointBase);
-                allItems.push(item);
-              }
+          return {
+            endpointBase,
+            items: Array.isArray(data?.data) ? data.data : [],
+          };
+        }),
+      );
+      const allItems = [];
+      for (const r of results) {
+        if (r.status === "fulfilled" && Array.isArray(r.value?.items)) {
+          for (const item of r.value.items) {
+            if (item?.id) {
+              modelEndpointMap.set(item.id, r.value.endpointBase);
+              cachedRemoteModels.set(item.id, item);
+              allItems.push(item);
             }
           }
-        } catch {
-          // If a remote worker is offline or restarting, keep other nodes functional
+        }
+      }
+      for (const [mid, cached] of cachedRemoteModels.entries()) {
+        if (!allItems.some((item) => item.id === mid)) {
+          allItems.push(cached);
         }
       }
       return allItems
@@ -385,36 +406,66 @@ export function createProviderService({
                 json_schema: { name: "orchestra_response", strict: true, schema },
               },
             };
-      const effectiveBase =
-        id === "openai-compatible"
-          ? modelEndpointMap.get(targetModel) || c.base
-          : c.base;
-      const chatUrl =
-        id === "ollama"
-          ? `${c.base}/api/chat`
-          : id === "openai-compatible" && !effectiveBase.endsWith("/v1")
-            ? `${effectiveBase}/v1/chat/completions`
-            : `${effectiveBase}/chat/completions`;
-      const data = await requestJSON(
-        id === "ollama" ? ollamaFetch : providerFetch,
-        chatUrl,
-        {
-          method: "POST",
-          headers: headers(c),
-          body: JSON.stringify(body),
-        },
-        { signal, timeoutMs: 120000 },
-      );
-      const content =
-        id === "ollama"
-          ? data?.message?.content
-          : data?.choices?.[0]?.message?.content;
-      if (typeof content !== "string" || !content.trim())
-        throw new Error("Provider returned no message content");
-      const cleaned = cleanJSON(content);
-      const parsed = JSON.parse(cleaned);
-      validate(parsed, schema);
-      return parsed;
+      const candidateBases =
+        id === "openai-compatible" && bases.length > 0
+          ? [
+              ...(modelEndpointMap.has(targetModel)
+                ? [modelEndpointMap.get(targetModel)]
+                : []),
+              ...bases.filter((b) => b !== modelEndpointMap.get(targetModel)),
+            ]
+          : [c.base];
+
+      let lastError = null;
+      for (const currentBase of candidateBases) {
+        try {
+          const chatUrl =
+            id === "ollama"
+              ? `${currentBase}/api/chat`
+              : id === "openai-compatible" && !currentBase.endsWith("/v1")
+                ? `${currentBase}/v1/chat/completions`
+                : `${currentBase}/chat/completions`;
+          const data = await requestJSON(
+            id === "ollama" ? ollamaFetch : providerFetch,
+            chatUrl,
+            {
+              method: "POST",
+              headers: headers(c),
+              body: JSON.stringify(body),
+            },
+            { signal, timeoutMs: 120000 },
+          );
+          const content =
+            id === "ollama"
+              ? data?.message?.content
+              : data?.choices?.[0]?.message?.content;
+          if (typeof content !== "string" || !content.trim())
+            throw new Error("Provider returned no message content");
+          const cleaned = cleanJSON(content);
+          const parsed = JSON.parse(cleaned);
+          if (parsed && typeof parsed === "object") {
+            if (typeof parsed.tool === "string") parsed.tool = parsed.tool.trim();
+            if (parsed.done === "true") parsed.done = true;
+            if (parsed.done === "false") parsed.done = false;
+            if (typeof parsed.args === "string") {
+              try {
+                parsed.args = JSON.parse(parsed.args);
+              } catch {}
+            }
+          }
+          validate(parsed, schema);
+          if (id === "openai-compatible") {
+            modelEndpointMap.set(targetModel, currentBase);
+          }
+          return parsed;
+        } catch (candidateErr) {
+          if (signal?.aborted || /canceled/i.test(candidateErr.message)) {
+            throw candidateErr;
+          }
+          lastError = candidateErr;
+        }
+      }
+      throw lastError || new Error("Provider returned no message content");
     };
 
     try {

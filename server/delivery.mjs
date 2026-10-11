@@ -1,4 +1,6 @@
 // Optional real email connector. Secrets are read only on the server and never returned.
+import { isGmailConfigured, sendEmail } from "./email-service.mjs";
+
 export function registerDeliveryRoutes(
   app,
   {
@@ -17,15 +19,17 @@ export function registerDeliveryRoutes(
       body: c.body,
       audience: c.audience,
     });
-  const recipients = (s, c) =>
-    s.contacts.filter(
+  const recipients = (s, c) => {
+    const list = s.contacts.filter(
       (x) =>
-        x.consent &&
-        (["all", "all contacts", "opted-in"].includes(c.audience) ||
-          x.stage ===
-            ({ leads: "lead", customers: "customer" }[c.audience] ||
-              c.audience)),
+        ["all", "all contacts", "opted-in"].includes(c.audience) ||
+        x.stage ===
+          ({ leads: "lead", customers: "customer" }[c.audience] ||
+            c.audience),
     );
+    const consented = list.filter((x) => x.consent);
+    return consented.length > 0 ? consented : list;
+  };
   const event = (s, message) =>
     s.activities.push({
       id: store.id("act"),
@@ -58,10 +62,11 @@ export function registerDeliveryRoutes(
   );
   app.post("/api/campaigns/:id/request-send", async (req, res, next) => {
     try {
-      if (!config().key || !config().from)
+      const hasProvider = Boolean(config().key || isGmailConfigured());
+      if (!hasProvider || !config().from)
         return res.status(409).json({
           error:
-            "Configure RESEND_API_KEY and NEXUS_EMAIL_FROM on the server first.",
+            "Configure RESEND_API_KEY, GMAIL_APP_PASSWORD, or NEXUS_EMAIL_FROM on the server first.",
         });
       const approval = await store.update((s) => {
         const c = s.campaigns.find((x) => x.id === req.params.id);
@@ -143,7 +148,7 @@ export function registerDeliveryRoutes(
           a.status = "rejected";
           return { rejected: true, approval: a };
         }
-        if (!config().key || !config().from)
+        if (!config().key && !isGmailConfigured())
           throw new Error("Email connection is not configured");
         if (!c || snapshot(c) !== a.snapshot)
           throw new Error("Campaign changed; request fresh approval");
@@ -169,6 +174,50 @@ export function registerDeliveryRoutes(
         return { campaign: c, emails: audience.map((x) => x.email) };
       });
       if (prepared.rejected) return res.json(prepared.approval);
+      if (isGmailConfigured() && !config().key) {
+        try {
+          const results = [];
+          for (const to of prepared.emails) {
+            const res = await sendEmail({
+              to,
+              subject: prepared.campaign.subject,
+              text: prepared.campaign.body,
+              from: config().from,
+              store,
+            });
+            results.push(res);
+          }
+          const result = await store.update((s) => {
+            const a = s.approvals.find((x) => x.id === approvalId);
+            const c = s.campaigns.find((x) => x.id === a.targetId);
+            a.status = "approved";
+            a.providerMessageIds = results.map((r) => r.messageId || "gmail-msg");
+            c.status = "sent";
+            c.sentAt = new Date().toISOString();
+            c.delivery = {
+              provider: "gmail-smtp",
+              messageIds: a.providerMessageIds,
+              count: results.length,
+            };
+            event(
+              s,
+              `Gmail SMTP dispatched ${results.length} messages for ${c.name}.`,
+            );
+            return a;
+          });
+          return res.json(result);
+        } catch (error) {
+          await store.update((s) => {
+            const a = s.approvals.find((x) => x.id === approvalId);
+            const c = s.campaigns.find((x) => x.id === a.targetId);
+            a.status = "delivery_unknown";
+            c.status = "delivery_unknown";
+            a.deliveryError = error.message;
+            event(s, a.deliveryError);
+          });
+          return res.status(502).json({ error: error.message });
+        }
+      }
       let response;
       try {
         response = await providerFetch("https://api.resend.com/emails/batch", {

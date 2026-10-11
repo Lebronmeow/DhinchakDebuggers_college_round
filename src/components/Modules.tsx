@@ -1523,6 +1523,12 @@ function Webinars({ p }: { p: ModuleProps }) {
 
 function Campaigns({ p }: { p: ModuleProps }) {
   const [open, setOpen] = useState(false);
+  const [emailInfo, setEmailInfo] = useState<{ configured: boolean; provider?: string } | null>(null);
+  useEffect(() => {
+    api<{ email: { configured: boolean; provider?: string } }>("/connections")
+      .then((c) => setEmailInfo(c.email))
+      .catch(() => setEmailInfo(null));
+  }, []);
   const [f, setF] = useState({
     name: "",
     subject: "",
@@ -1553,22 +1559,54 @@ function Campaigns({ p }: { p: ModuleProps }) {
         </Button>
       }
     >
-      <div className="nx-notice">
-        Drafts only. No email is sent without an integration.
-      </div>
+      {emailInfo?.configured ? (
+        <div
+          className="nx-notice"
+          style={{
+            background: "rgba(118, 228, 194, 0.08)",
+            borderColor: "rgba(118, 228, 194, 0.3)",
+            color: "var(--accent)",
+          }}
+        >
+          Live email integration active: {emailInfo.provider || "Gmail SMTP"}. Real dispatches enabled.
+        </div>
+      ) : (
+        <div className="nx-notice">
+          Draft mode. Live inbox delivery is active when Gmail SMTP or Resend credentials are configured.
+        </div>
+      )}
       <div className="nx-cards">
         {p.state.campaigns.map((c) => (
           <article className="nx-panel nx-card" key={c.id}>
-            <span className="nx-badge nx-warn">{displayLabel(c.status)}</span>
+            <span
+              className={`nx-badge ${
+                c.status === "sent" ? "nx-live" : c.status === "scheduled_local" ? "nx-info" : "nx-warn"
+              }`}
+            >
+              {c.status === "sent" ? "Sent · Live Delivery" : displayLabel(c.status)}
+            </span>
             <h3>{c.name}</h3>
             <p>
               <strong>{c.subject}</strong>
             </p>
             <p>{c.body}</p>
             <small>
-              Audience: {displayLabel(c.audience || "not defined")} ·{" "}
-              {date(c.scheduledAt)}
+              {c.status === "sent" ? (
+                <>
+                  Recipient: {c.recipients?.join(", ") || c.audience} · Delivered via{" "}
+                  {c.provider === "gmail-smtp" ? "Gmail (Live SMTP)" : c.provider || "SMTP"} · {date(c.sentAt || c.scheduledAt)}
+                </>
+              ) : (
+                <>
+                  Audience: {displayLabel(c.audience || "not defined")} · {date(c.scheduledAt)}
+                </>
+              )}
             </small>
+            {c.messageId && (
+              <div style={{ marginTop: "0.25rem" }}>
+                <code style={{ fontSize: "0.75rem", opacity: 0.8 }}>Message ID: {c.messageId}</code>
+              </div>
+            )}
             {c.status === "draft" && (
               <Button
                 quiet
@@ -2043,25 +2081,6 @@ function Analytics({ p }: { p: ModuleProps }) {
             Real-time pipeline synchronization across prospect acquisition,
             session attendance, and autonomous specialist actions.
           </p>
-        </div>
-        <div className="nx-deck-summary" aria-label="Dashboard summary">
-          <div className="nx-deck-stat">
-            <span>Pipeline</span>
-            <strong>{contacts.length}</strong>
-            <small>contacts tracked</small>
-          </div>
-          <div className="nx-deck-stat">
-            <span>Live programs</span>
-            <strong>
-              {p.state.webinars.length + p.state.campaigns.length}
-            </strong>
-            <small>events &amp; campaigns</small>
-          </div>
-          <div className="nx-deck-stat">
-            <span>Automation</span>
-            <strong>{agentRuns}</strong>
-            <small>workflow runs logged</small>
-          </div>
         </div>
       </div>
 

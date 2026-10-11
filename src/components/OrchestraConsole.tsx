@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Square,
   Terminal,
+  Trash2,
   X,
 } from "lucide-react";
 import { api } from "../api";
@@ -223,12 +224,43 @@ export default function OrchestraConsole({
   const [prompt, setPrompt] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [routedModels, setRoutedModels] = useState<RoutedModel[]>([]);
-  const [model, setModel] = useState("");
-  const [providerId, setProviderId] = useState("openrouter");
-  const [autoApprove, setAutoApprove] = useState(false);
-  const [employeeModels, setEmployeeModels] = useState<Record<string, string>>(
-    DEFAULT_EMPLOYEE_MODELS,
-  );
+  const [model, setModel] = useState(() => {
+    try {
+      return typeof localStorage !== "undefined"
+        ? localStorage.getItem("nexus_selected_model") || ""
+        : "";
+    } catch {
+      return "";
+    }
+  });
+  const [providerId, setProviderId] = useState(() => {
+    try {
+      return typeof localStorage !== "undefined"
+        ? localStorage.getItem("nexus_selected_provider") || "ollama"
+        : "ollama";
+    } catch {
+      return "ollama";
+    }
+  });
+  const [autoApprove, setAutoApprove] = useState(() => {
+    try {
+      return typeof localStorage !== "undefined"
+        ? localStorage.getItem("nexus_auto_approve") === "true"
+        : false;
+    } catch {
+      return false;
+    }
+  });
+  const [employeeModels, setEmployeeModels] = useState<Record<string, string>>(() => {
+    try {
+      const saved =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("nexus_employee_models")
+          : null;
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_EMPLOYEE_MODELS;
+  });
   const [aiError, setAiError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -236,6 +268,41 @@ export default function OrchestraConsole({
   const pollInFlight = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedRun = runs.find((run) => run.id === selectedId) || runs[0];
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== "undefined" && providerId) {
+        localStorage.setItem("nexus_selected_provider", providerId);
+      }
+    } catch {}
+  }, [providerId]);
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== "undefined" && model) {
+        localStorage.setItem("nexus_selected_model", model);
+      }
+    } catch {}
+  }, [model]);
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("nexus_auto_approve", String(autoApprove));
+      }
+    } catch {}
+  }, [autoApprove]);
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(
+          "nexus_employee_models",
+          JSON.stringify(employeeModels),
+        );
+      }
+    } catch {}
+  }, [employeeModels]);
 
   const refresh = useCallback(async () => {
     if (pollInFlight.current) return;
@@ -268,14 +335,47 @@ export default function OrchestraConsole({
   useEffect(() => {
     mounted.current = true;
     void refresh();
-    void Promise.all([
-      api<AiStatus>("/ai/status"),
-      api<{ models: RoutedModel[] }>("/providers"),
-    ])
-      .then(([status, catalog]) => {
+    void api<AiStatus>("/ai/status")
+      .then((status) => {
         if (!mounted.current) return;
         const installed = status.models || [];
         setModels(installed);
+        let savedModel = "";
+        let savedProvider = "";
+        try {
+          if (typeof localStorage !== "undefined") {
+            savedModel = localStorage.getItem("nexus_selected_model") || "";
+            savedProvider =
+              localStorage.getItem("nexus_selected_provider") || "";
+          }
+        } catch {}
+
+        if (savedModel && installed.includes(savedModel)) {
+          setModel(savedModel);
+          if (savedProvider) setProviderId(savedProvider);
+        } else if (installed.length) {
+          setModel((current) => current || installed[0]);
+          setProviderId((current) => current || "ollama");
+        }
+        setAiError(
+          status.available === false
+            ? status.error || "Local model service unavailable"
+            : "",
+        );
+      })
+      .catch((cause) => {
+        if (mounted.current) {
+          setAiError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to read model status",
+          );
+        }
+      });
+
+    void api<{ models: RoutedModel[] }>("/providers")
+      .then((catalog) => {
+        if (!mounted.current) return;
         const discovered = (catalog.models || []).filter(
           (m) =>
             !m.id.toLowerCase().includes("nvidia") &&
@@ -286,34 +386,31 @@ export default function OrchestraConsole({
         const openRouterModels = discovered.filter(
           (m) => m.provider === "openrouter",
         );
-        if (installed.length) {
-          setProviderId("ollama");
-          setModel(installed[0]);
-        } else if (openRouterModels.length) {
+        let savedModel = "";
+        let savedProvider = "";
+        try {
+          if (typeof localStorage !== "undefined") {
+            savedModel = localStorage.getItem("nexus_selected_model") || "";
+            savedProvider =
+              localStorage.getItem("nexus_selected_provider") || "";
+          }
+        } catch {}
+
+        if (savedModel && discovered.some((m) => m.id === savedModel)) {
+          setModel(savedModel);
+          if (savedProvider) setProviderId(savedProvider);
+        } else if (!model && openRouterModels.length) {
           setProviderId("openrouter");
           const defaultModel =
             openRouterModels.find((m) => m.id === "inclusionai/ling-3.1-flash")
               ?.id || openRouterModels[0].id;
           setModel(defaultModel);
-        } else if (discovered.length) {
+        } else if (!model && discovered.length) {
           setProviderId(discovered[0].provider);
           setModel(discovered[0].id);
         }
-        setAiError(
-          status.available === false
-            ? status.error || "Local model service unavailable"
-            : "",
-        );
       })
-      .catch(
-        (cause) =>
-          mounted.current &&
-          setAiError(
-            cause instanceof Error
-              ? cause.message
-              : "Unable to read model status",
-          ),
-      );
+      .catch(() => {});
     return () => {
       mounted.current = false;
       if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -360,6 +457,29 @@ export default function OrchestraConsole({
     }
   };
 
+  const deleteRun = async (id: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/orchestra/runs/${id}`, "DELETE");
+      if (!mounted.current) return;
+      setRuns((current) => current.filter((run) => run.id !== id));
+      if (selectedId === id) setSelectedId(null);
+      await refresh();
+      onChange?.();
+    } catch (cause) {
+      if (mounted.current)
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "The command could not be deleted",
+        );
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const text = prompt.trim();
@@ -372,6 +492,10 @@ export default function OrchestraConsole({
         const found = routedModels.find((m) => m.id === modelId);
         if (found?.provider) {
           agentProviders[role] = found.provider;
+        } else if (modelId === "qwen3:4b") {
+          agentProviders[role] = "openai-compatible";
+        } else if (models.includes(modelId)) {
+          agentProviders[role] = "ollama";
         } else {
           agentProviders[role] = providerId;
         }
@@ -459,24 +583,27 @@ export default function OrchestraConsole({
             disabled={busy || (!models.length && !routedModels.length)}
           >
             <option value="">Choose model</option>
-            {routedModels.length
-              ? routedModels
-                  .filter((item) => !item.id.toLowerCase().includes("nvidia"))
-                  .map((item) => (
-                    <option
-                      key={`${item.provider}:${item.id}`}
-                      value={item.id}
-                      data-provider={item.provider}
-                    >
-                      {item.provider} · {item.name}
-                      {item.free ? " · catalog free" : ""}
-                    </option>
-                  ))
-              : models.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
+            {models.map((item) => (
+              <option key={`local-${item}`} value={item} data-provider="ollama">
+                {item}
+              </option>
+            ))}
+            {routedModels
+              .filter(
+                (item) =>
+                  !models.includes(item.id) &&
+                  !item.id.toLowerCase().includes("nvidia"),
+              )
+              .map((item) => (
+                <option
+                  key={`${item.provider}:${item.id}`}
+                  value={item.id}
+                  data-provider={item.provider}
+                >
+                  {item.provider} · {item.name}
+                  {item.free ? " · catalog free" : ""}
+                </option>
+              ))}
           </select>
           {routedModels.length > 0 && (
             <small className="oc-model-note">
@@ -543,9 +670,19 @@ export default function OrchestraConsole({
                   }
                   disabled={busy}
                 >
+                  {models.map((localM) => (
+                    <option key={`local-${localM}`} value={localM}>
+                      [Local GPU] {localM}
+                    </option>
+                  ))}
+                  <option value="qwen3:4b">
+                    [Friend GPU] qwen3:4b (Friend 3 GPU)
+                  </option>
                   {routedModels
                     .filter(
                       (m) =>
+                        m.id !== "qwen3:4b" &&
+                        !models.includes(m.id) &&
                         (m.free ||
                           m.provider === "ollama" ||
                           m.provider === "openai-compatible") &&
@@ -565,9 +702,11 @@ export default function OrchestraConsole({
                         </option>
                       );
                     })}
-                  {!routedModels.some((m) => m.id === assignedModel) && (
-                    <option value={assignedModel}>{assignedModel}</option>
-                  )}
+                  {!routedModels.some((m) => m.id === assignedModel) &&
+                    !models.includes(assignedModel) &&
+                    assignedModel !== "qwen3:4b" && (
+                      <option value={assignedModel}>{assignedModel}</option>
+                    )}
                 </select>
               </div>
             ))}
@@ -631,18 +770,35 @@ export default function OrchestraConsole({
               Command history <span>{runs.length}</span>
             </div>
             {sortedRuns.map((run) => (
-              <button
-                type="button"
+              <div
                 key={run.id}
-                className={`oc-history-item ${run.id === selectedRun?.id ? "selected" : ""}`}
-                onClick={() => setSelectedId(run.id)}
+                className={`oc-history-row ${run.id === selectedRun?.id ? "selected" : ""}`}
               >
-                <strong>{run.title || run.prompt}</strong>
-                <span>
-                  <Badge status={run.status} />{" "}
-                  <time>{date(run.updatedAt)}</time>
-                </span>
-              </button>
+                <button
+                  type="button"
+                  className={`oc-history-item ${run.id === selectedRun?.id ? "selected" : ""}`}
+                  onClick={() => setSelectedId(run.id)}
+                >
+                  <strong>{run.title || run.prompt}</strong>
+                  <span>
+                    <Badge status={run.status} />{" "}
+                    <time>{date(run.updatedAt)}</time>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="oc-history-del"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteRun(run.id);
+                  }}
+                  title="Delete this run"
+                  aria-label={`Delete ${run.title || run.prompt}`}
+                  disabled={busy}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             ))}
           </aside>
           {selectedRun && (
@@ -727,6 +883,15 @@ export default function OrchestraConsole({
                     <Play size={14} /> Resume
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="oc-btn-delete"
+                  onClick={() => deleteRun(selectedRun.id)}
+                  disabled={busy}
+                  title="Delete run from history"
+                >
+                  <Trash2 size={14} /> Delete run
+                </button>
                 <span className="oc-updated">
                   <Clock3 size={13} /> Updated {date(selectedRun.updatedAt)}
                 </span>

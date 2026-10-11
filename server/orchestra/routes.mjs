@@ -116,6 +116,11 @@ export async function registerOrchestraRoutes(
     if (!run) return res.status(404).json({ error: "run not found" });
     return res.json(run);
   });
+  app.delete("/api/orchestra/runs/:id", async (req, res) => {
+    const deleted = await engine.delete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: "run not found" });
+    return res.json({ success: true, id: req.params.id });
+  });
   app.post("/api/orchestra/runs/:id/resume", async (req, res) => {
     const found = runs().find((r) => r.id === req.params.id);
     if (!found) return res.status(404).json({ error: "run not found" });

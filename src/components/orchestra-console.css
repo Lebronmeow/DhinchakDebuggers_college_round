@@ -150,22 +150,54 @@
   float: right;
   color: var(--muted);
 }
+.oc-history-row {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  border-bottom: 1px solid #eadfc9;
+}
+.oc-history-row.selected {
+  background: var(--paper-deep);
+  border-left: 4px solid var(--green);
+}
 .oc-history-item {
   display: block;
   text-align: left;
   width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 13px;
   border: 0;
-  border-bottom: 1px solid #eadfc9;
+  border-bottom: 0;
   background: transparent;
   color: var(--ink);
   font: inherit;
   cursor: pointer;
 }
 .oc-history-item.selected {
-  background: var(--paper-deep);
-  border-left: 4px solid var(--green);
+  background: transparent;
+  border-left: 0;
   padding-left: 9px;
+}
+.oc-history-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  padding: 0;
+}
+.oc-history-row:hover .oc-history-del {
+  opacity: 1;
+}
+.oc-history-del:hover {
+  color: var(--red);
+  background: rgba(220, 53, 69, 0.08);
 }
 .oc-history-item strong {
   display: block;
@@ -237,6 +269,13 @@
 .oc-actions button:hover,
 .oc-current button:hover {
   background: var(--green);
+  color: #fff;
+}
+.oc-actions button.oc-btn-delete {
+  color: #a8423f;
+}
+.oc-actions button.oc-btn-delete:hover {
+  background: var(--red);
   color: #fff;
 }
 .oc-updated {

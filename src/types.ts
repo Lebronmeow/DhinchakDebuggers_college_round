@@ -41,6 +41,10 @@ export interface Campaign {
   audience: string;
   scheduledAt: string;
   createdAt: string;
+  recipients?: string[];
+  provider?: string;
+  messageId?: string;
+  sentAt?: string;
 }
 export interface Webinar {
   id: string;
